@@ -34,7 +34,6 @@ from pandas.core.dtypes.generic import (
 from pandas.core.dtypes.missing import isna, notna
 
 from pandas.core.algorithms import take, value_counts
-from pandas.core.arrays._reshaping import implement_2d
 from pandas.core.arrays.base import ExtensionArray, _extension_array_shared_docs
 from pandas.core.arrays.categorical import Categorical
 import pandas.core.common as com
@@ -141,7 +140,6 @@ for more.
         ),
     )
 )
-@implement_2d
 class IntervalArray(IntervalMixin, ExtensionArray):
     ndim = 1
     can_hold_na = True
@@ -697,10 +695,8 @@ class IntervalArray(IntervalMixin, ExtensionArray):
     def nbytes(self) -> int:
         return self.left.nbytes + self.right.nbytes
 
-    @property
-    def size(self) -> int:
-        # Avoid materializing self.values
-        return self.left.size
+    def __len__(self):
+        return len(self.left)
 
     def take(self, indices, allow_fill=False, fill_value=None, axis=None, **kwargs):
         """

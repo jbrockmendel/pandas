@@ -52,7 +52,6 @@ from pandas.core.ops.invalid import make_invalid_op
 from pandas.tseries import frequencies
 from pandas.tseries.offsets import DateOffset, Tick
 
-from ._reshaping import implement_2d
 from .base import ExtensionArray, ExtensionOpsMixin
 
 
@@ -318,7 +317,6 @@ default 'raise'
         return self._round(freq, RoundTo.PLUS_INFTY, ambiguous, nonexistent)
 
 
-@implement_2d
 class DatetimeLikeArrayMixin(ExtensionOpsMixin, AttributesMixin, ExtensionArray):
     """
     Shared Base/Mixin class for DatetimeArray, TimedeltaArray, PeriodArray
@@ -384,6 +382,9 @@ class DatetimeLikeArrayMixin(ExtensionOpsMixin, AttributesMixin, ExtensionArray)
     # ----------------------------------------------------------------
     # Array-Like / EA-Interface Methods
 
+    def __len__(self):
+        return len(self._data)
+
     @property
     def nbytes(self):
         return self._data.nbytes
@@ -393,10 +394,6 @@ class DatetimeLikeArrayMixin(ExtensionOpsMixin, AttributesMixin, ExtensionArray)
         if is_object_dtype(dtype):
             return np.array(list(self), dtype=object)
         return self._data
-
-    @property
-    def size(self) -> int:
-        return self._data.size
 
     def __getitem__(self, key):
         """

@@ -62,7 +62,6 @@ from pandas.core.sorting import nargsort
 
 from pandas.io.formats import console
 
-from ._reshaping import implement_2d
 from .base import ExtensionArray, _extension_array_shared_docs
 
 _take_msg = textwrap.dedent(
@@ -226,7 +225,6 @@ setter to change values in the categorical.
 """
 
 
-@implement_2d
 class Categorical(ExtensionArray, PandasObject):
     """
     Represent a categorical variable in classic R / S-plus fashion.
@@ -517,13 +515,6 @@ class Categorical(ExtensionArray, PandasObject):
                 return self
             return self._set_dtype(dtype)
         return np.array(self, dtype=dtype, copy=copy)
-
-    @cache_readonly
-    def size(self) -> int:
-        """
-        return the len of myself
-        """
-        return self._codes.size
 
     @cache_readonly
     def itemsize(self) -> int:

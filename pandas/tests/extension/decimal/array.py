@@ -9,7 +9,7 @@ from pandas.core.dtypes.base import ExtensionDtype
 
 import pandas as pd
 from pandas.api.extensions import register_extension_dtype
-from pandas.core.arrays import ExtensionArray, ExtensionScalarOpsMixin, implement_2d
+from pandas.core.arrays import ExtensionArray, ExtensionScalarOpsMixin
 
 
 @register_extension_dtype
@@ -47,7 +47,6 @@ class DecimalDtype(ExtensionDtype):
         return True
 
 
-@implement_2d
 class DecimalArray(ExtensionArray, ExtensionScalarOpsMixin):
     __array_priority__ = 1000
 
@@ -138,8 +137,7 @@ class DecimalArray(ExtensionArray, ExtensionScalarOpsMixin):
             value = decimal.Decimal(value)
         self._data[key] = value
 
-    @property
-    def size(self) -> int:
+    def __len__(self):
         return self._data.size
 
     @property

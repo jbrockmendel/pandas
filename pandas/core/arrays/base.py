@@ -24,7 +24,7 @@ from pandas.core.dtypes.missing import isna
 from pandas._typing import ArrayLike
 from pandas.core import ops
 from pandas.core.algorithms import _factorize_array, unique
-from pandas.core.arrays._reshaping import can_safe_ravel, tuplify_shape
+from pandas.core.arrays._reshaping import can_safe_ravel, implement_2d, tuplify_shape
 from pandas.core.missing import backfill_1d, pad_1d
 from pandas.core.sorting import nargsort
 
@@ -33,7 +33,13 @@ _not_implemented_message = "{} does not implement {}."
 _extension_array_shared_docs = dict()  # type: Dict[str, str]
 
 
-class ExtensionArray:
+class Reshapable(type):
+    def __init__(cls, name: str, bases: tuple, clsdict: dict):
+        super().__init__(name, bases, clsdict)
+        implement_2d(cls)
+
+
+class ExtensionArray(metaclass=Reshapable):
     """
     Abstract base class for custom 1-D array types.
 
@@ -326,7 +332,7 @@ class ExtensionArray:
         -------
         length : int
         """
-        return self.shape[0]
+        raise AbstractMethodError()
 
     def __iter__(self):
         """
@@ -341,7 +347,13 @@ class ExtensionArray:
     # ------------------------------------------------------------------------
     # Required attributes
     # ------------------------------------------------------------------------
-    _shape = None
+    # The currently expanded dimension.
+    #   * None : (N,)   array
+    #   * 0    : (N, 1) array
+    #   * 1    : (1, N) array
+    # We use a double-underscore to mangle the name to _ExtensionArray__expanded_dim
+    # to avoid clashes with subclasses.
+    __expanded_dim = None
 
     @property
     def dtype(self) -> ExtensionDtype:
@@ -355,19 +367,41 @@ class ExtensionArray:
         """
         Return a tuple of the array dimensions.
         """
-        if self._shape is not None:
-            return self._shape
+        if not self._allows_2d:
+            length = self.__len__.__wrapped__(self)
+        else:
+            length = len(self)
 
-        # Default to 1D
-        length = self.size
-        return (length,)
+        if self._ExtensionArray__expanded_dim == 0:
+            result = length, 1
+        elif self._ExtensionArray__expanded_dim == 1:
+            result = 1, length
+        else:
+            result = (length,)
+
+        assert np.prod(result) == length
+        return result
 
     @shape.setter
     def shape(self, value):
+        # TODO: support negative dimensions in value.
         size = np.prod(value)
         if size != self.size:
             raise ValueError("Implied size must match actual size.")
-        self._shape = value
+
+        list_like = is_list_like(value)
+        if list_like and len(value) > 2:
+            raise ValueError("Only 1 or 2-dimensions allowed.")
+        elif list_like and len(value) == 2:
+            if value[1] == 1:
+                self._ExtensionArray__expanded_dim = 0
+            elif value[0] == 1:
+                self._ExtensionArray__expanded_dim = 1
+            else:
+                raise ValueError
+
+        else:
+            self._ExtensionArray__expanded_dim = None
 
     @property
     def ndim(self) -> int:
@@ -381,7 +415,7 @@ class ExtensionArray:
         """
         The number of elements in this array.
         """
-        raise AbstractMethodError(self)
+        return np.prod(self.shape)
 
     @property
     def nbytes(self) -> int:
@@ -967,7 +1001,11 @@ class ExtensionArray:
         # numpy accepts either a single tuple or an expanded tuple
         shape = tuplify_shape(self.size, shape)
         result = self.view()
-        result._shape = shape
+        result.shape = shape
+        # if len(shape) > 1:
+        #     expand_dim = int(shape[1] > 1)
+        #     result._ExtensionArray__expanded_dim = expand_dim
+        # # TODO: is this missing cases?
         return result
 
     @property

@@ -3,43 +3,97 @@ Utilities for implementing 2D compatibility for 1D ExtensionArrays.
 """
 from functools import wraps
 from typing import Tuple
+import warnings
 
 import numpy as np
 
 from pandas._libs.lib import is_integer
 
+msg = (
+    "ExtensionArray subclass {name} defines {method}. "
+    "In the future, this will not be supported. Please "
+    "inherit {method} from the ExtensionArray base class."
+)
+
 
 def implement_2d(cls):
     """
-    A decorator to take a 1-dimension-only ExtensionArray subclass and make
+    Patch a 1-dimension-only ExtensionArray subclass and make
     it support limited 2-dimensional operations.
-    """
-    from pandas.core.arrays import ExtensionArray
 
-    # For backwards-compatibility, if an EA author implemented __len__
-    #  but not size, we use that __len__ method to get an array's size.
+    We achieve this by rewriting dimension-dependent methods to
+    pre-process the inputs to make them look 1d, call the underlying
+    method, and post-process the output.
+    """
+    if cls._allows_2d:
+        return
+
+    if cls.__name__ == "ExtensionArray" and cls.__module__ == "pandas.core.arrays.base":
+        # No need to patch for ExtensionArray base class.
+        return
+    else:
+        from pandas.core.arrays import ExtensionArray
+
+    # For backwards-compatibility, we use the length, size, or shape
+    # defined by the subclass. We can always define the other two in
+    # terms of the one.
     has_size = cls.size is not ExtensionArray.size
     has_shape = cls.shape is not ExtensionArray.shape
-    has_len = cls.__len__ is not ExtensionArray.__len__
 
-    if not has_size and has_len:
-        cls.size = property(cls.__len__)
-        cls.__len__ = ExtensionArray.__len__
+    orig_len = cls.__len__
+    # TODO: Find a better way to do this. I suspect we could check whether
+    # our cls.bases contains ExtensionArray...
+    if hasattr(orig_len, "_original_len"):
+        # When a user does class Foo(Bar(ExtensionArray)):
+        # we want to use the unpatched verison.
+        orig_len = orig_len._original_len
 
-    elif not has_size and has_shape:
+    orig_shape = cls.shape
 
-        @property
-        def size(self) -> int:
-            return np.prod(self.shape)
+    @wraps(orig_len)
+    def __len__(self):
+        length = orig_len(self)
+        if self._ExtensionArray__expanded_dim is None:
+            result = length
+        elif self._ExtensionArray__expanded_dim == 0:
+            result = length
+        else:
+            result = 1
 
-        cls.size = size
+        return result
+
+    cls.__len__ = __len__
+    cls.__len__._original_len = orig_len
+
+    if has_shape:
+        warnings.warn(msg.format(name=cls.__name__, method="shape"), DeprecationWarning)
+
+        def get_shape(self):
+            return ExtensionArray.shape.fget(self)
+
+        def set_shape(self, value):
+            if orig_shape.fset:
+                orig_shape.fset(self, value)
+
+            ExtensionArray.shape.fset(self, value)
+
+        cls.shape = property(fget=get_shape, fset=set_shape)
+
+    if has_size:
+        warnings.warn(msg.format(name=cls.__name__, method="size"), DeprecationWarning)
+
+        def get_size(self):
+            return ExtensionArray.size.fget(self)
+
+        cls.size = property(fget=get_size)
 
     orig_copy = cls.copy
 
     @wraps(orig_copy)
     def copy(self):
         result = orig_copy(self)
-        result._shape = self._shape
+        # TODO: Can this setattr be done in the metaclass? Less likely to forget.
+        result._ExtensionArray__expanded_dim = self._ExtensionArray__expanded_dim
         return result
 
     cls.copy = copy
@@ -59,7 +113,7 @@ def implement_2d(cls):
         if isinstance(key[0], slice):
             if slice_contains_zero(key[0]):
                 result = orig_getitem(self, key[1])
-                result._shape = (1, result.size)
+                result._ExtensionArray__expanded_dim = 1
                 return result
 
             raise NotImplementedError(key)
@@ -92,7 +146,7 @@ def implement_2d(cls):
             result = orig_take(
                 self, indices, allow_fill=allow_fill, fill_value=fill_value
             )
-            result._shape = (1, result.size)
+            result._ExtensionArray__expanded_dim = 1
             return result
 
         # For axis == 0, because we only support shape (1, N)

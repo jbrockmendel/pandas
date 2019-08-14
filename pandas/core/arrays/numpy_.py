@@ -19,7 +19,6 @@ from pandas.core.algorithms import searchsorted, take, unique
 from pandas.core.construction import extract_array
 from pandas.core.missing import backfill_1d, pad_1d
 
-from ._reshaping import implement_2d
 from .base import ExtensionArray, ExtensionOpsMixin
 
 
@@ -87,7 +86,6 @@ class PandasDtype(ExtensionDtype):
         return self._dtype.itemsize
 
 
-@implement_2d
 class PandasArray(ExtensionArray, ExtensionOpsMixin, NDArrayOperatorsMixin):
     """
     A pandas ExtensionArray for NumPy data.
@@ -247,9 +245,8 @@ class PandasArray(ExtensionArray, ExtensionOpsMixin, NDArrayOperatorsMixin):
         else:
             self._ndarray[key] = value
 
-    @property
-    def size(self) -> int:
-        return self._ndarray.size
+    def __len__(self) -> int:
+        return len(self._ndarray)
 
     @property
     def nbytes(self) -> int:

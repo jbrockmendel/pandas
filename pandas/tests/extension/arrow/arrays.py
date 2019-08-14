@@ -18,7 +18,6 @@ from pandas.api.extensions import (
     register_extension_dtype,
     take,
 )
-from pandas.core.arrays import implement_2d
 
 
 @register_extension_dtype
@@ -64,7 +63,6 @@ class ArrowStringDtype(ExtensionDtype):
         return ArrowStringArray
 
 
-@implement_2d
 class ArrowExtensionArray(ExtensionArray):
     @classmethod
     def from_scalars(cls, values):
@@ -90,8 +88,7 @@ class ArrowExtensionArray(ExtensionArray):
             vals = self._data.to_pandas()[item]
             return type(self).from_scalars(vals)
 
-    @property
-    def size(self) -> int:
+    def __len__(self) -> int:
         return len(self._data)
 
     def astype(self, dtype, copy=True):

@@ -26,7 +26,7 @@ from pandas.core.dtypes.missing import isna, notna
 
 from pandas.core import nanops, ops
 from pandas.core.algorithms import take
-from pandas.core.arrays import ExtensionArray, ExtensionOpsMixin, implement_2d
+from pandas.core.arrays import ExtensionArray, ExtensionOpsMixin
 from pandas.core.tools.numeric import to_numeric
 
 
@@ -232,7 +232,6 @@ def coerce_to_array(values, dtype, mask=None, copy=False):
     return values, mask
 
 
-@implement_2d
 class IntegerArray(ExtensionArray, ExtensionOpsMixin):
     """
     Array of integer (optional missing) values.
@@ -462,9 +461,8 @@ class IntegerArray(ExtensionArray, ExtensionOpsMixin):
         self._data[key] = value
         self._mask[key] = mask
 
-    @property
-    def size(self) -> int:
-        return self._data.size
+    def __len__(self):
+        return len(self._data)
 
     @property
     def nbytes(self):

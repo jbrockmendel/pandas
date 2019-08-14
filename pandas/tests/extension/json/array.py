@@ -21,7 +21,7 @@ import numpy as np
 
 from pandas.core.dtypes.base import ExtensionDtype
 
-from pandas.core.arrays import ExtensionArray, implement_2d
+from pandas.core.arrays import ExtensionArray
 
 
 class JSONDtype(ExtensionDtype):
@@ -47,7 +47,6 @@ class JSONDtype(ExtensionDtype):
             raise TypeError("Cannot construct a '{}' from '{}'".format(cls, string))
 
 
-@implement_2d
 class JSONArray(ExtensionArray):
     dtype = JSONDtype()
     __array_priority__ = 1000
@@ -107,8 +106,7 @@ class JSONArray(ExtensionArray):
                     assert isinstance(v, self.dtype.type)
                     self.data[k] = v
 
-    @property
-    def size(self) -> int:
+    def __len__(self) -> int:
         return len(self.data)
 
     @property
