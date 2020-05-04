@@ -272,6 +272,7 @@ cdef class _Timestamp(datetime):
                     [self + other[n] for n in range(len(other))],
                     dtype=object,
                 )
+            return NotImplemented
 
         # index/series like
         elif hasattr(other, '_typ'):
@@ -301,12 +302,9 @@ cdef class _Timestamp(datetime):
                     [self - other[n] for n in range(len(other))],
                     dtype=object,
                 )
-
-        typ = getattr(other, '_typ', None)
-        if typ is not None:
             return NotImplemented
 
-        if other is NaT:
+        elif other is NaT:
             return NaT
 
         # coerce if necessary if we are a Timestamp-like
