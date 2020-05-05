@@ -1647,13 +1647,7 @@ cdef class _Period:
                     raise IncompatibleFrequency(msg)
                 # GH 23915 - mul by base freq since __add__ is agnostic of n
                 return (self.ordinal - other.ordinal) * self.freq.base
-            elif getattr(other, '_typ', None) == 'periodindex':
-                # GH#21314 PeriodIndex - Period returns an object-index
-                # of DateOffset objects, for which we cannot use __neg__
-                # directly, so we have to apply it pointwise
-                return other.__sub__(self).map(lambda x: -x)
-            else:  # pragma: no cover
-                return NotImplemented
+            return NotImplemented
         elif is_period_object(other):
             if self is NaT:
                 return NaT
