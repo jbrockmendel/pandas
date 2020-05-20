@@ -311,9 +311,6 @@ def dispatch_to_series(left, right, func, str_rep=None, axis=None):
     -------
     DataFrame
     """
-    # Note: we use iloc to access columns for compat with cases
-    #       with non-unique columns.
-    import pandas.core.computation.expressions as expressions
 
     right = lib.item_from_zerodim(right)
     if lib.is_scalar(right) or np.ndim(right) == 0:
@@ -330,37 +327,9 @@ def dispatch_to_series(left, right, func, str_rep=None, axis=None):
         bm = operate_blockwise(left, right, array_op)
         return type(left)(bm)
 
-    elif isinstance(right, ABCSeries) and axis == "columns":
-        # We only get here if called via _combine_series_frame,
-        # in which case we specifically want to operate row-by-row
-        assert right.index.equals(left.columns)
-
-        if right.dtype == "timedelta64[ns]":
-            # ensure we treat NaT values as the correct dtype
-            # Note: we do not do this unconditionally as it may be lossy or
-            #  expensive for EA dtypes.
-            right = np.asarray(right)
-
-            def column_op(a, b):
-                return {i: func(a.iloc[:, i], b[i]) for i in range(len(a.columns))}
-
-        else:
-
-            def column_op(a, b):
-                return {i: func(a.iloc[:, i], b.iloc[i]) for i in range(len(a.columns))}
-
-    elif isinstance(right, ABCSeries):
-        assert right.index.equals(left.index)  # Handle other cases later
-
-        def column_op(a, b):
-            return {i: func(a.iloc[:, i], b) for i in range(len(a.columns))}
-
     else:
         # Remaining cases have less-obvious dispatch rules
         raise NotImplementedError(right)
-
-    new_data = expressions.evaluate(column_op, str_rep, left, right)
-    return new_data
 
 
 # -----------------------------------------------------------------------------
@@ -511,6 +480,10 @@ def _combine_series_frame(left, right, func, axis: int, str_rep: str):
     # We assume that self.align(other, ...) has already been called
 
     rvalues = right._values
+    if rvalues.dtype.kind == "m":
+        # We can losslessly unpack to ndarray and operate block-wise
+        rvalues = np.asarray(rvalues)
+
     if isinstance(rvalues, np.ndarray):
         # TODO(EA2D): no need to special-case with 2D EAs
         # We can operate block-wise
@@ -525,12 +498,16 @@ def _combine_series_frame(left, right, func, axis: int, str_rep: str):
         bm = left._mgr.apply(array_op, right=rvalues.T, align_keys=["right"])
         return type(left)(bm)
 
+    # Note: we use iloc to access columns for compat with cases
+    #       with non-unique columns.
     if axis == 0:
-        new_data = dispatch_to_series(left, right, func)
+        # We know at this point that right.index.equals(left.index)
+        return {i: func(left.iloc[:, i], right) for i in range(len(left.columns))}
     else:
-        new_data = dispatch_to_series(left, right, func, axis="columns")
-
-    return new_data
+        # We know at this point that right.index.equals(left.columns)
+        return {
+            i: func(left.iloc[:, i], right.iloc[i]) for i in range(len(left.columns))
+        }
 
 
 def _align_method_FRAME(
@@ -782,9 +759,12 @@ def _comp_method_FRAME(cls, op, special):
             self, other, axis=None, level=None, flex=False
         )
 
-        axis = "columns"  # only relevant for Series other case
-        # See GH#4537 for discussion of scalar op behavior
-        new_data = dispatch_to_series(self, other, op, str_rep, axis=axis)
+        if isinstance(other, ABCSeries):
+            # axis hard-coded to 1 because this is not a flex method
+            new_data = _combine_series_frame(self, other, op, axis=1, str_rep=str_rep)
+        else:
+            # See GH#4537 for discussion of scalar op behavior
+            new_data = dispatch_to_series(self, other, op, str_rep)
         return self._construct_result(new_data)
 
     f.__name__ = op_name

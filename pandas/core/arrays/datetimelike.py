@@ -804,9 +804,16 @@ class DatetimeLikeArrayMixin(
         if isinstance(value, type(self)):
             return value
 
-        # Do type inference if necessary up front
-        # e.g. we passed PeriodIndex.values and got an ndarray of Periods
-        value = array(value)
+        if not (
+            isinstance(value, np.ndarray) and value.dtype.kind not in ["m", "M", "O"]
+        ):
+            # FIXME: kludge to avoid passing 2D array to PandasArray
+            # TODO(EA2D): kludge not needed with 2D EAs
+
+            # Do type inference if necessary up front
+            # e.g. we passed PeriodIndex.values and got an ndarray of Periods
+            value = array(value)
+
         value = extract_array(value, extract_numpy=True)
 
         if cast_str and is_dtype_equal(value.dtype, "string"):
