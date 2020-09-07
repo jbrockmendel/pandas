@@ -11,7 +11,7 @@ import pandas._libs.internals as libinternals
 from pandas._libs.internals import BlockPlacement
 from pandas._libs.tslibs import conversion
 from pandas._libs.tslibs.timezones import tz_compare
-from pandas._typing import ArrayLike, Scalar
+from pandas._typing import ArrayLike, Dtype, Scalar
 from pandas.util._validators import validate_bool_kwarg
 
 from pandas.core.dtypes.cast import (
@@ -526,7 +526,9 @@ class Block(PandasObject):
 
         return self.split_and_operate(None, f, False)
 
-    def astype(self, dtype, copy: bool = False, errors: str = "raise"):
+    def astype(
+        self, dtype: Dtype, copy: bool = False, errors: str = "raise"
+    ) -> "Block":
         """
         Coerce to the new dtype.
 
@@ -559,8 +561,7 @@ class Block(PandasObject):
             )
             raise TypeError(msg)
 
-        if dtype is not None:
-            dtype = pandas_dtype(dtype)
+        dtype = pandas_dtype(dtype)
 
         # may need to convert to categorical
         if is_categorical_dtype(dtype):
@@ -571,8 +572,6 @@ class Block(PandasObject):
 
             return self.make_block(Categorical(self.values, dtype=dtype))
 
-        dtype = pandas_dtype(dtype)
-
         # astype processing
         if is_dtype_equal(self.dtype, dtype):
             if copy:
@@ -581,20 +580,12 @@ class Block(PandasObject):
 
         # force the copy here
         if self.is_extension:
-            # TODO: Should we try/except this astype?
             values = self.values.astype(dtype)
         else:
             if issubclass(dtype.type, str):
-
-                # use native type formatting for datetime/tz/timedelta
-                if self.is_datelike:
-                    values = self.to_native_types()
-
-                # astype formatting
-                else:
-                    # Because we have neither is_extension nor is_datelike,
-                    #  self.values already has the correct shape
-                    values = self.values
+                # Because we are not extension and datelike are handled
+                #  in subclasses, self.values already has the correct shape
+                values = self.values
 
             else:
                 values = self.get_values(dtype=dtype)
@@ -615,7 +606,7 @@ class Block(PandasObject):
         if isinstance(values, np.ndarray):
             values = values.reshape(self.shape)
 
-        newb = make_block(values, placement=self.mgr_locs, ndim=self.ndim)
+        newb = self.make_block(values)
 
         if newb.is_numeric and self.is_numeric:
             if newb.shape != self.shape:
@@ -2101,6 +2092,18 @@ class DatetimeLikeBlockMixin:
         new_values = values.shift(periods, fill_value=fill_value, axis=axis)
         return self.make_block_same_class(new_values)
 
+    def astype(
+        self, dtype: Dtype, copy: bool = False, errors: str = "raise"
+    ) -> "Block":
+        # Special treatment for rendering datetimelike values to string dtypes
+        dtype = pandas_dtype(dtype)
+
+        if issubclass(dtype.type, str):
+            values = self.array_values().astype(dtype, copy=copy)
+            values[isna(values)] = "NaT"  # xref GH#36153
+            return self.make_block(values)
+        return super().astype(dtype, copy=copy, errors=errors)
+
 
 class DatetimeBlock(DatetimeLikeBlockMixin, Block):
     __slots__ = ()
@@ -2139,7 +2142,7 @@ class DatetimeBlock(DatetimeLikeBlockMixin, Block):
         assert isinstance(values, np.ndarray), type(values)
         return values
 
-    def astype(self, dtype, copy: bool = False, errors: str = "raise"):
+    def astype(self, dtype: Dtype, copy: bool = False, errors: str = "raise"):
         """
         these automatically copy, so copy=True has no effect
         raise on an except if raise == True
