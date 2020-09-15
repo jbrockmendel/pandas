@@ -165,6 +165,13 @@ class NumericIndex(Index):
         # treat NA values as nans:
         if is_scalar(item) and isna(item):
             item = self._na_value
+
+        try:
+            item = self._convert_for_op(item)
+        except TypeError:
+            # dont cast bool to numeric
+            return self.astype(object).insert(loc, item)
+
         return super().insert(loc, item)
 
     def _union(self, other, sort):

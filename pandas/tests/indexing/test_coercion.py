@@ -383,7 +383,7 @@ class TestInsertIndexCoercion(CoercionBase):
         [
             (1, 1, np.int64),
             (1.1, 1.1, np.float64),
-            (False, 0, np.int64),
+            (False, False, object),
             ("x", "x", object),
         ],
     )
@@ -399,7 +399,7 @@ class TestInsertIndexCoercion(CoercionBase):
         [
             (1, 1.0, np.float64),
             (1.1, 1.1, np.float64),
-            (False, 0.0, np.float64),
+            (False, False, object),
             ("x", "x", object),
         ],
     )
