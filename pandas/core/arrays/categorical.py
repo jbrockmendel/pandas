@@ -2,7 +2,17 @@ from csv import QUOTE_NONNUMERIC
 from functools import partial
 import operator
 from shutil import get_terminal_size
-from typing import Dict, Hashable, List, Sequence, Type, TypeVar, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    Hashable,
+    List,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 from warnings import warn
 
 import numpy as np
@@ -16,11 +26,7 @@ from pandas.compat.numpy import function as nv
 from pandas.util._decorators import cache_readonly, deprecate_kwarg
 from pandas.util._validators import validate_bool_kwarg, validate_fillna_kwargs
 
-from pandas.core.dtypes.cast import (
-    coerce_indexer_dtype,
-    maybe_cast_to_extension_array,
-    maybe_infer_to_datetimelike,
-)
+from pandas.core.dtypes.cast import coerce_indexer_dtype, maybe_infer_to_datetimelike
 from pandas.core.dtypes.common import (
     ensure_int64,
     ensure_object,
@@ -57,6 +63,9 @@ from pandas.core.sorting import nargsort
 from pandas.core.strings.object_array import ObjectStringArrayMixin
 
 from pandas.io.formats import console
+
+if TYPE_CHECKING:
+    from pandas import Index
 
 CategoricalT = TypeVar("CategoricalT", bound="Categorical")
 
@@ -2500,7 +2509,7 @@ class CategoricalAccessor(PandasDelegate, PandasObject, NoNewAttributesMixin):
 # utility routines
 
 
-def _get_codes_for_values(values, categories) -> np.ndarray:
+def _get_codes_for_values(values, categories: "Index") -> np.ndarray:
     """
     utility routine to turn values into codes given the specified categories
 
@@ -2513,11 +2522,7 @@ def _get_codes_for_values(values, categories) -> np.ndarray:
         # scalar objects. e.g.
         # Categorical(array[Period, Period], categories=PeriodIndex(...))
         cls = categories.dtype.construct_array_type()
-        values = maybe_cast_to_extension_array(cls, values)
-        if not isinstance(values, cls):
-            # exception raised in _from_sequence
-            values = ensure_object(values)
-            categories = ensure_object(categories)
+        values = cls._from_sequence(values, dtype=categories.dtype)
     elif not dtype_equal:
         values = ensure_object(values)
         categories = ensure_object(categories)
