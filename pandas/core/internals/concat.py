@@ -14,6 +14,7 @@ from pandas.core.dtypes.common import (
     is_categorical_dtype,
     is_datetime64_dtype,
     is_datetime64tz_dtype,
+    is_ea_dtype,
     is_extension_array_dtype,
     is_float_dtype,
     is_numeric_dtype,
@@ -75,10 +76,17 @@ def concatenate_block_managers(
                 #  than concat_compat
                 values = np.concatenate(vals, axis=blk.ndim - 1)
             else:
-                # TODO(EA2D): special-casing not needed with 2D EAs
-                values = concat_compat(vals)
-                if not isinstance(values, ExtensionArray):
-                    values = values.reshape(1, len(values))
+                if all(x.ndim == blk.ndim for x in vals):
+                    # i.e. DTA/TDA
+                    values = concat_compat(vals, axis=blk.ndim - 1)
+                    if blk.ndim == 2 and values.ndim == 1:
+                        # FIXME: kludge
+                        values = values.reshape(1, -1)
+                else:
+                    # TODO(EA2D): special-casing not needed with 2D EAs
+                    values = concat_compat(vals)
+                    if not is_ea_dtype(values.dtype):
+                        values = values.reshape(1, len(values))
 
             if blk.values.dtype == values.dtype:
                 # Fast-path
@@ -86,11 +94,11 @@ def concatenate_block_managers(
             else:
                 b = make_block(values, placement=placement, ndim=blk.ndim)
         else:
-            b = make_block(
-                _concatenate_join_units(join_units, concat_axis, copy=copy),
-                placement=placement,
-                ndim=len(axes),
-            )
+            new_values = _concatenate_join_units(join_units, concat_axis, copy=copy)
+            if len(axes) == 2 and new_values.ndim == 1 and isinstance(new_values, DatetimeArray):
+                # FIXME: so so wrong
+                new_values = new_values.reshape(1, -1)
+            b = make_block(new_values, placement=placement, ndim=len(axes))
         blocks.append(b)
 
     return BlockManager(blocks, axes)
@@ -258,13 +266,14 @@ class JoinUnit:
                     if self.block is None:
                         # TODO(EA2D): special case unneeded with 2D EAs
                         return DatetimeArray(
-                            np.full(self.shape[1], fill_value.value), dtype=empty_dtype
+                            np.full(self.shape, fill_value.value), dtype=empty_dtype
                         )
+                        # FIXME: use full self.shape?
                 elif getattr(self.block, "is_categorical", False):
                     pass
                 elif getattr(self.block, "is_extension", False):
                     pass
-                elif is_extension_array_dtype(empty_dtype):
+                elif is_ea_dtype(empty_dtype):
                     missing_arr = empty_dtype.construct_array_type()._from_sequence(
                         [], dtype=empty_dtype
                     )
@@ -307,7 +316,7 @@ class JoinUnit:
         return values
 
 
-def _concatenate_join_units(join_units, concat_axis, copy):
+def _concatenate_join_units(join_units, concat_axis: int, copy: bool):
     """
     Concatenate values from several join units along selected axis.
     """
@@ -326,21 +335,35 @@ def _concatenate_join_units(join_units, concat_axis, copy):
         # Only one block, nothing to concatenate.
         concat_values = to_concat[0]
         if copy:
-            if isinstance(concat_values, np.ndarray):
+            if isinstance(concat_values, np.ndarray):  # TODO: or DTA/TDA?
                 # non-reindexed (=not yet copied) arrays are made into a view
                 # in JoinUnit.get_reindexed_values
                 if concat_values.base is not None:
                     concat_values = concat_values.copy()
             else:
                 concat_values = concat_values.copy()
+    elif all(isinstance(t, DatetimeArray) for t in to_concat):
+        # TODO(EA2D): special case not needed if all EAs used HybridBlocks
+        concat_values = concat_compat(to_concat, axis=concat_axis)
+
     elif any(isinstance(t, ExtensionArray) for t in to_concat):
         # concatting with at least one EA means we are concatting a single column
         # the non-EA values are 2D arrays with shape (1, n)
-        to_concat = [t if isinstance(t, ExtensionArray) else t[0, :] for t in to_concat]
+        to_concat = [
+            t if (isinstance(t, ExtensionArray) and is_ea_dtype(t))
+            else t[0, :] for t in to_concat
+        ]
         concat_values = concat_compat(to_concat, axis=0)
-        if not isinstance(concat_values, ExtensionArray) or (
-            isinstance(concat_values, DatetimeArray) and concat_values.tz is None
-        ):
+
+        if isinstance(concat_values, DatetimeArray):
+            # if the result of concat is not an EA but an ndarray, reshape to
+            # 2D to put it a non-EA Block
+            # special case DatetimeArray, which *is* an EA, but is put in a
+            # consolidated 2D block
+            if concat_values.tz is None:
+                concat_values = np.asarray(concat_values).reshape(1, -1)
+
+        elif not is_ea_dtype(concat_values) or not isinstance(concat_values, ExtensionArray):#: or (isinstance(concat_values, DatetimeArray) and concat_values.tz is None):
             # if the result of concat is not an EA but an ndarray, reshape to
             # 2D to put it a non-EA Block
             # special case DatetimeArray, which *is* an EA, but is put in a

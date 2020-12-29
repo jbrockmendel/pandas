@@ -28,7 +28,9 @@ from pandas.core.dtypes.cast import (
 )
 from pandas.core.dtypes.common import (
     DT64NS_DTYPE,
+    is_datetime64tz_dtype,
     is_dtype_equal,
+    is_ea_dtype,
     is_extension_array_dtype,
     is_list_like,
 )
@@ -49,6 +51,7 @@ from pandas.core.internals.blocks import (
     DatetimeTZBlock,
     ExtensionBlock,
     ObjectValuesExtensionBlock,
+    _block_shape,
     extend_blocks,
     get_block_type,
     make_block,
@@ -287,6 +290,16 @@ class BlockManager(PandasObject):
             state = state[3]["0.14.1"]
             self.axes = [ensure_index(ax) for ax in state["axes"]]
             ndim = len(self.axes)
+
+            for blk in state["blocks"]:
+                vals = blk["values"]
+                if is_datetime64tz_dtype(vals.dtype):
+                    # older versions will hold in DatetimeIndex instead of DTA
+                    vals = extract_array(vals, extract_numpy=True)
+                    if vals.ndim == 1 and ndim == 2:
+                        vals = vals.reshape(1, -1)
+                        blk["values"] = vals
+
             self.blocks = tuple(
                 unpickle_block(b["values"], b["mgr_locs"], ndim=ndim)
                 for b in state["blocks"]
@@ -1059,7 +1072,7 @@ class BlockManager(PandasObject):
         if self._blklocs is None and self.ndim > 1:
             self._rebuild_blknos_and_blklocs()
 
-        value_is_extension_type = is_extension_array_dtype(value)
+        value_is_extension_type = is_ea_dtype(value)
 
         # categorical/sparse/datetimetz
         if value_is_extension_type:
@@ -1093,7 +1106,6 @@ class BlockManager(PandasObject):
         # Accessing public blknos ensures the public versions are initialized
         blknos = self.blknos[loc]
         blklocs = self.blklocs[loc].copy()
-
         unfit_mgr_locs = []
         unfit_val_locs = []
         removed_blknos = []
@@ -1190,7 +1202,7 @@ class BlockManager(PandasObject):
         # insert to the axis; this could possibly raise a TypeError
         new_axis = self.items.insert(loc, item)
 
-        if value.ndim == self.ndim - 1 and not is_extension_array_dtype(value.dtype):
+        if value.ndim == self.ndim - 1:# and not is_extension_array_dtype(value.dtype):
             # TODO(EA2D): special case not needed with 2D EAs
             value = safe_reshape(value, (1,) + value.shape)
 
@@ -1416,7 +1428,6 @@ class BlockManager(PandasObject):
                         newblk = blk.copy(deep=False)
                         newblk.mgr_locs = slice(mgr_loc, mgr_loc + 1)
                         blocks.append(newblk)
-
                 else:
                     # GH#32779 to avoid the performance penalty of copying,
                     #  we may try to only slice
@@ -1781,7 +1792,12 @@ def _form_blocks(arrays, names: Index, axes) -> List[Block]:
 
     if len(items_dict["DatetimeTZBlock"]):
         dttz_blocks = [
-            make_block(array, klass=DatetimeTZBlock, placement=i, ndim=2)
+            make_block(
+                _block_shape(extract_array(array), 2),
+                klass=DatetimeTZBlock,
+                placement=i,
+                ndim=2,
+            )
             for i, _, array in items_dict["DatetimeTZBlock"]
         ]
         blocks.extend(dttz_blocks)

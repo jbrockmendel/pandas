@@ -5,6 +5,8 @@ import numpy as np
 
 from pandas._typing import ArrayLike
 
+from pandas.core.dtypes.common import is_ea_dtype
+
 if TYPE_CHECKING:
     from pandas.core.internals.blocks import Block
     from pandas.core.internals.managers import BlockManager
@@ -25,7 +27,7 @@ def _iter_block_pairs(
         locs = blk.mgr_locs
         blk_vals = blk.values
 
-        left_ea = not isinstance(blk_vals, np.ndarray)
+        left_ea = is_ea_dtype(blk_vals)#not isinstance(blk_vals, np.ndarray)
 
         rblks = right._slice_take_blocks_ax0(locs.indexer, only_slice=True)
 
@@ -36,7 +38,7 @@ def _iter_block_pairs(
         #    assert rblks[0].shape[0] == 1, rblks[0].shape
 
         for k, rblk in enumerate(rblks):
-            right_ea = not isinstance(rblk.values, np.ndarray)
+            right_ea = is_ea_dtype(rblk.values)#not isinstance(rblk.values, np.ndarray)
 
             lvals, rvals = _get_same_shape_values(blk, rblk, left_ea, right_ea)
             info = BlockPairInfo(lvals, rvals, locs, left_ea, right_ea, rblk)

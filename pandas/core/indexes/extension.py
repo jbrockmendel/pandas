@@ -301,6 +301,10 @@ class ExtensionIndex(Index):
                 return self
             return self.copy()
 
+        if isinstance(dtype, np.dtype) and dtype.kind == "M" and dtype != "M8[ns]":
+            # FIXME: kludge
+            raise TypeError(f"Cannot cast {type(self._data).__name__} to dtype")
+
         new_values = self._data.astype(dtype, copy=copy)
 
         # pass copy=False because any copying will be done in the

@@ -98,6 +98,14 @@ def _cast_to_common_type(arr: ArrayLike, dtype: DtypeObj) -> ArrayLike:
     return arr.astype(dtype, copy=False)
 
 
+def is_nonempty(x: ArrayLike, axis: int) -> bool:
+    # filter empty arrays
+    # 1-d dtypes always are included here
+    if x.ndim <= axis:
+        return True
+    return x.shape[axis] > 0
+
+
 def concat_compat(to_concat, axis: int = 0):
     """
     provide concatenation of an array of arrays each of which is a single
@@ -114,12 +122,6 @@ def concat_compat(to_concat, axis: int = 0):
     -------
     a single array, preserving the combined dtypes
     """
-    # filter empty arrays
-    # 1-d dtypes always are included here
-    def is_nonempty(x) -> bool:
-        if x.ndim <= axis:
-            return True
-        return x.shape[axis] > 0
 
     # If all arrays are empty, there's nothing to convert, just short-cut to
     # the concatenation, #3121.
@@ -127,8 +129,13 @@ def concat_compat(to_concat, axis: int = 0):
     # Creating an empty array directly is tempting, but the winnings would be
     # marginal given that it would still require shape & dtype calculation and
     # np.concatenate which has them both implemented is compiled.
-    non_empties = [x for x in to_concat if is_nonempty(x)]
+    non_empties = [x for x in to_concat if is_nonempty(x, axis)]
+
     if non_empties and axis == 0:
+        to_concat = non_empties
+    elif non_empties and axis == 1 and all(isinstance(x, ExtensionArray) for x in to_concat):
+        # FIXME: only do this for DTA/TDA?
+        #  Fix by passing correct axis from internals.concat?
         to_concat = non_empties
 
     typs = _get_dtype_kinds(to_concat)
@@ -147,8 +154,14 @@ def concat_compat(to_concat, axis: int = 0):
 
         if isinstance(to_concat[0], ExtensionArray):
             cls = type(to_concat[0])
+            if _contains_datetime:
+                return _concat_datetime(to_concat, axis=axis)
+                return cls._concat_same_type(to_concat, axis=axis)
             return cls._concat_same_type(to_concat)
         else:
+            if _contains_datetime:
+
+                return np.concatenate(to_concat, axis=axis)
             return np.concatenate(to_concat)
 
     elif _contains_datetime or "timedelta" in typs:

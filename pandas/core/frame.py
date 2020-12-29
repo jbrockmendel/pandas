@@ -8868,6 +8868,8 @@ NaN 12.3   33.0
 
         def blk_func(values):
             if isinstance(values, ExtensionArray):
+                if values.dtype.kind in ["m", "M"]:
+                    return values._reduce(name, axis=1, skipna=skipna, **kwds)
                 return values._reduce(name, skipna=skipna, **kwds)
             else:
                 return op(values, axis=1, skipna=skipna, **kwds)

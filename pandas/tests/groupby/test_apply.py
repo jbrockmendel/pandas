@@ -994,7 +994,7 @@ def test_apply_function_with_indexing_return_column():
     tm.assert_frame_equal(result, expected)
 
 
-@pytest.mark.xfail(reason="GH-34998")
+#@pytest.mark.xfail(reason="GH-34998")
 def test_apply_with_timezones_aware():
     # GH: 27212
 

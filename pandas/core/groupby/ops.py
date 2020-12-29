@@ -56,6 +56,7 @@ from pandas.core.dtypes.common import (
 from pandas.core.dtypes.missing import isna, maybe_fill
 
 import pandas.core.algorithms as algorithms
+from pandas.core.arrays import ExtensionArray
 from pandas.core.base import SelectionMixin
 import pandas.core.common as com
 from pandas.core.frame import DataFrame
@@ -186,7 +187,8 @@ class BaseGrouper:
         result_values = None
 
         sdata: FrameOrSeries = splitter._get_sorted_data()
-        if sdata.ndim == 2 and np.any(sdata.dtypes.apply(is_extension_array_dtype)):
+        #if sdata.ndim == 2 and np.any(sdata.dtypes.apply(lambda x: is_extension_array_dtype(x) or x.kind in ["m", "M"])):
+        if sdata.ndim == 2 and any(isinstance(x, ExtensionArray) for x in sdata._iter_column_arrays()):
             # calling splitter.fast_apply will raise TypeError via apply_frame_axis0
             #  if we pass EA instead of ndarray
             #  TODO: can we have a workaround for EAs backed by ndarray?

@@ -24,6 +24,7 @@ from pandas.core.dtypes.common import (
     is_categorical_dtype,
     is_datetime64tz_dtype,
     is_dtype_equal,
+    is_ea_dtype,
     is_extension_array_dtype,
     is_integer_dtype,
     is_list_like,
@@ -174,7 +175,7 @@ def init_ndarray(values, index, columns, dtype: Optional[DtypeObj], copy: bool):
 
         index, columns = _get_axes(len(values), 1, index, columns)
         return arrays_to_mgr([values], columns, index, columns, dtype=dtype)
-    elif is_extension_array_dtype(values) or is_extension_array_dtype(dtype):
+    elif is_ea_dtype(values) or is_extension_array_dtype(dtype):
         # GH#19157
 
         if isinstance(values, np.ndarray) and values.ndim > 1:
@@ -189,9 +190,18 @@ def init_ndarray(values, index, columns, dtype: Optional[DtypeObj], copy: bool):
 
         return arrays_to_mgr(values, columns, index, columns, dtype=dtype)
 
-    # by definition an array here
-    # the dtypes will be coerced to a single dtype
-    values = _prep_ndarray(values, copy=copy)
+    if is_datetime64tz_dtype(values):
+        # TODO: combine into _prep_ndarray?
+        values = extract_array(values, extract_numpy=True)
+        if copy:
+            values = values.copy()
+        if values.ndim == 1:
+            values = values.reshape(-1, 1)
+
+    else:
+        # by definition an array here
+        # the dtypes will be coerced to a single dtype
+        values = _prep_ndarray(values, copy=copy)
 
     if dtype is not None and not is_dtype_equal(values.dtype, dtype):
         try:
@@ -219,8 +229,9 @@ def init_ndarray(values, index, columns, dtype: Optional[DtypeObj], copy: bool):
             # transpose and separate blocks
 
             dvals_list = [maybe_infer_to_datetimelike(row) for row in values]
+            dvals_list = [extract_array(x, extract_numpy=True) for x in dvals_list]  # TODO: unpack DateitmeIndex directly in maybe_infer_to_datetimelike
             for n in range(len(dvals_list)):
-                if isinstance(dvals_list[n], np.ndarray):
+                if True:#isinstance(dvals_list[n], np.ndarray):
                     dvals_list[n] = dvals_list[n].reshape(1, -1)
 
             from pandas.core.internals.blocks import make_block
@@ -234,6 +245,9 @@ def init_ndarray(values, index, columns, dtype: Optional[DtypeObj], copy: bool):
         else:
             datelike_vals = maybe_infer_to_datetimelike(values)
             block_values = [datelike_vals]
+            block_values = [extract_array(x, extract_numpy=True) for x in block_values]
+            if values.ndim == 2:
+                block_values = [x if x.ndim == 2 else x.reshape(1, -1) for x in block_values]  # TODO: use block_shape
     else:
         block_values = [values]
 
