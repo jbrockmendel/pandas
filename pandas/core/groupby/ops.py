@@ -187,8 +187,9 @@ class BaseGrouper:
         result_values = None
 
         sdata: FrameOrSeries = splitter._get_sorted_data()
-        #if sdata.ndim == 2 and np.any(sdata.dtypes.apply(lambda x: is_extension_array_dtype(x) or x.kind in ["m", "M"])):
-        if sdata.ndim == 2 and any(isinstance(x, ExtensionArray) for x in sdata._iter_column_arrays()):
+        if sdata.ndim == 2 and any(
+            isinstance(x, ExtensionArray) for x in sdata._iter_column_arrays()
+        ):
             # calling splitter.fast_apply will raise TypeError via apply_frame_axis0
             #  if we pass EA instead of ndarray
             #  TODO: can we have a workaround for EAs backed by ndarray?

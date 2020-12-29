@@ -40,6 +40,7 @@ from pandas.core.dtypes.common import (
     is_datetime64_dtype,
     is_datetime64tz_dtype,
     is_dtype_equal,
+    is_strict_ea,
     is_ea_dtype,
     is_extension_array_dtype,
     is_float,
@@ -409,7 +410,7 @@ class Block(PandasObject):
             # if we get a 2D ExtensionArray, we need to split it into 1D pieces
             nbs = []
             for i, loc in enumerate(self.mgr_locs):
-                if not is_ea_dtype(result.dtype):
+                if not is_strict_ea(result):
                     vals = result[[i]]
                 else:
                     vals = result[i]
@@ -1093,30 +1094,13 @@ class Block(PandasObject):
                     # assign the masked values hence produces incorrect result.
                     # `np.place` on the other hand uses the ``new`` values at it is
                     # to place in the masked locations of ``new_values``
-                    if isinstance(new_values, np.ndarray):
-                        np.place(new_values, mask, new)
-                        # i.e. new_values[mask] = new
-                    else:
-                        # DTA/TDA # TODO: no longer reached, could remove?
-                        new_values[mask] = new
+                    np.place(new_values, mask, new)
                 elif mask.shape[-1] == len(new) or len(new) == 1:
-                    if isinstance(new_values, np.ndarray):
-                        np.putmask(new_values, mask, new)
-                    else:
-                        # DTA/TDA # TODO: no longer reached, could remove?
-                        new_values.putmask(mask, new)
+                    np.putmask(new_values, mask, new)
                 else:
                     raise ValueError("cannot assign mismatch length to masked array")
             else:
-                if not isinstance(new_values, np.ndarray):
-                    # DTA/TDA # TODO: no longer reached, could remove?
-                    # TODO: special-casing unnecessary with __array_function__
-                    if is_list_like(new):
-                        new_values[mask] = new[mask]
-                    else:
-                        new_values[mask] = new
-                else:
-                    np.putmask(new_values, mask, new)
+                np.putmask(new_values, mask, new)
 
         # maybe upcast me
         elif mask.any():
@@ -2106,23 +2090,6 @@ class HybridBlock(Block):
     def _putmask_simple(self, mask: np.ndarray, value: Any):
         self.values.putmask(mask, value)
 
-    def __fillna(self, value, limit=None, inplace=False, downcast=None):
-        values = self.values if inplace else self.values.copy()
-        # TODO: i think copy here is unnecessary?
-
-        try:
-            values = values.fillna(value=value, limit=limit)
-        except TypeError:
-            if self.dtype.kind == "M":
-                # FIXME: fall back this consistently or not at all
-                return super().fillna(value, limit=limit, inplace=inplace, downcast=downcast)
-            raise
-
-        nb = self.make_block_same_class(
-            values=values, placement=self.mgr_locs, ndim=self.ndim
-        )
-        return [nb]
-
     def where(
         self, other, cond, errors="raise", try_cast: bool = False, axis: int = 0
     ) -> List["Block"]:
@@ -2266,16 +2233,7 @@ class DatetimeBlock(DatetimeLikeBlockMixin):
         if not isinstance(values, DatetimeArray):
             values = DatetimeArray(values)
 
-        #assert isinstance(values, np.ndarray), type(values)
         return values
-
-    def __set_inplace(self, locs, values):
-        """
-        See Block.set.__doc__
-        """
-        values = conversion.ensure_datetime64ns(values, copy=False)
-
-        self.values[locs] = values
 
 
 class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
@@ -2713,7 +2671,7 @@ def _block_shape(values: ArrayLike, ndim: int = 1) -> ArrayLike:
     """ guarantee the shape of the values to be at least 1 d """
     if values.ndim < ndim:
         shape = values.shape
-        if not is_ea_dtype(values.dtype):
+        if not is_strict_ea(values):
             # TODO(EA2D): https://github.com/pandas-dev/pandas/issues/23023
             # block.shape is incorrect for "2D" ExtensionArrays
             # We can't, and don't need to, reshape.
@@ -2743,7 +2701,6 @@ def safe_reshape(arr, new_shape: Shape):
         # Note: this will include TimedeltaArray and tz-naive DatetimeArray
         # TODO(EA2D): special case will be unnecessary with 2D EAs
         arr = extract_array(arr, extract_numpy=True).reshape(new_shape)
-        #arr = np.asarray(arr).reshape(new_shape)
     return arr
 
 

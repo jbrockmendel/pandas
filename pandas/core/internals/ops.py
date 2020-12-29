@@ -1,8 +1,6 @@
 from collections import namedtuple
 from typing import TYPE_CHECKING, Iterator, List, Tuple
 
-import numpy as np
-
 from pandas._typing import ArrayLike
 
 from pandas.core.dtypes.common import is_ea_dtype
@@ -27,7 +25,7 @@ def _iter_block_pairs(
         locs = blk.mgr_locs
         blk_vals = blk.values
 
-        left_ea = is_ea_dtype(blk_vals)#not isinstance(blk_vals, np.ndarray)
+        left_ea = is_ea_dtype(blk_vals.dtype)
 
         rblks = right._slice_take_blocks_ax0(locs.indexer, only_slice=True)
 
@@ -38,7 +36,7 @@ def _iter_block_pairs(
         #    assert rblks[0].shape[0] == 1, rblks[0].shape
 
         for k, rblk in enumerate(rblks):
-            right_ea = is_ea_dtype(rblk.values)#not isinstance(rblk.values, np.ndarray)
+            right_ea = is_ea_dtype(rblk.values.dtype)
 
             lvals, rvals = _get_same_shape_values(blk, rblk, left_ea, right_ea)
             info = BlockPairInfo(lvals, rvals, locs, left_ea, right_ea, rblk)

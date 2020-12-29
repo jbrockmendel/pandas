@@ -133,7 +133,11 @@ def concat_compat(to_concat, axis: int = 0):
 
     if non_empties and axis == 0:
         to_concat = non_empties
-    elif non_empties and axis == 1 and all(isinstance(x, ExtensionArray) for x in to_concat):
+    elif (
+        non_empties
+        and axis == 1
+        and all(isinstance(x, ExtensionArray) for x in to_concat)
+    ):
         # FIXME: only do this for DTA/TDA?
         #  Fix by passing correct axis from internals.concat?
         to_concat = non_empties
@@ -156,7 +160,6 @@ def concat_compat(to_concat, axis: int = 0):
             cls = type(to_concat[0])
             if _contains_datetime:
                 return _concat_datetime(to_concat, axis=axis)
-                return cls._concat_same_type(to_concat, axis=axis)
             return cls._concat_same_type(to_concat)
         else:
             if _contains_datetime:

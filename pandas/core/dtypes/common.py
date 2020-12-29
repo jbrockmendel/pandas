@@ -1482,7 +1482,10 @@ def is_extension_type(arr) -> bool:
 
 def is_strict_ea(obj):
     from pandas.core.arrays import DatetimeArray, ExtensionArray, TimedeltaArray
-    return isinstance(obj, ExtensionArray) and not isinstance(obj, (DatetimeArray, TimedeltaArray))
+
+    return isinstance(obj, ExtensionArray) and not isinstance(
+        obj, (DatetimeArray, TimedeltaArray)
+    )
 
 
 def is_ea_dtype(dtype) -> bool:

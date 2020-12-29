@@ -115,6 +115,7 @@ from pandas.core.dtypes.common import (
     is_object_dtype,
     is_scalar,
     is_sequence,
+    is_strict_ea,
     pandas_dtype,
 )
 from pandas.core.dtypes.missing import isna, notna
@@ -8868,7 +8869,7 @@ NaN 12.3   33.0
 
         def blk_func(values):
             if isinstance(values, ExtensionArray):
-                if values.dtype.kind in ["m", "M"]:
+                if not is_strict_ea(values):
                     return values._reduce(name, axis=1, skipna=skipna, **kwds)
                 return values._reduce(name, skipna=skipna, **kwds)
             else:
