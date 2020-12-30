@@ -347,12 +347,17 @@ def _concatenate_join_units(join_units, concat_axis, copy):
         to_concat = [t if is_strict_ea(t) else t[0, :] for t in to_concat]
         concat_values = concat_compat(to_concat, axis=0)
 
+        if concat_values.ndim < ndim and not is_strict_ea(concat_values):
+            # if the result of concat is not an EA but an ndarray, reshape to
+            # 2D to put it a non-EA Block
+            # special case DatetimeArray, which *is* an EA, but is put in a
+            # consolidated 2D block
+            # TODO(EA2D): we could just get this right within concat_compat
+            concat_values = concat_values.reshape(1, -1)
+
     else:
         concat_values = concat_compat(to_concat, axis=concat_axis)
 
-    if concat_values.ndim < ndim and not is_strict_ea(concat_values):
-        # TODO(EA2D): we could just get this right within concat_compat
-        concat_values = concat_values.reshape(1, -1)
     return concat_values
 
 
