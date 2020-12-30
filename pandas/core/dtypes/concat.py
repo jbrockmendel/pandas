@@ -162,10 +162,7 @@ def concat_compat(to_concat, axis: int = 0):
                 return _concat_datetime(to_concat, axis=axis)
             return cls._concat_same_type(to_concat)
         else:
-            if _contains_datetime:
-
-                return np.concatenate(to_concat, axis=axis)
-            return np.concatenate(to_concat)
+            return np.concatenate(to_concat, axis=axis)
 
     elif _contains_datetime or "timedelta" in typs:
         return _concat_datetime(to_concat, axis=axis)

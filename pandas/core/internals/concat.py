@@ -96,13 +96,6 @@ def concatenate_block_managers(
                 b = make_block(values, placement=placement, ndim=blk.ndim)
         else:
             new_values = _concatenate_join_units(join_units, concat_axis, copy=copy)
-            if (
-                len(axes) == 2
-                and new_values.ndim == 1
-                and isinstance(new_values, DatetimeArray)
-            ):
-                # FIXME: so so wrong
-                new_values = new_values.reshape(1, -1)
             b = make_block(new_values, placement=placement, ndim=len(axes))
         blocks.append(b)
 
@@ -335,6 +328,7 @@ def _concatenate_join_units(join_units, concat_axis: int, copy: bool):
         ju.get_reindexed_values(empty_dtype=empty_dtype, upcasted_na=upcasted_na)
         for ju in join_units
     ]
+    ndim = max(x.ndim for x in to_concat)
 
     if len(to_concat) == 1:
         # Only one block, nothing to concatenate.
@@ -377,6 +371,9 @@ def _concatenate_join_units(join_units, concat_axis: int, copy: bool):
     else:
         concat_values = concat_compat(to_concat, axis=concat_axis)
 
+    if concat_values.ndim < ndim and not is_strict_ea(concat_values):
+        # TODO(EA2D): we could just get this right within concat_compat
+        concat_values = concat_values.reshape(1, -1)
     return concat_values
 
 

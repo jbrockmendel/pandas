@@ -1106,6 +1106,7 @@ class BlockManager(PandasObject):
         # Accessing public blknos ensures the public versions are initialized
         blknos = self.blknos[loc]
         blklocs = self.blklocs[loc].copy()
+
         unfit_mgr_locs = []
         unfit_val_locs = []
         removed_blknos = []
@@ -1202,7 +1203,7 @@ class BlockManager(PandasObject):
         # insert to the axis; this could possibly raise a TypeError
         new_axis = self.items.insert(loc, item)
 
-        if value.ndim == self.ndim - 1:# and not is_extension_array_dtype(value.dtype):
+        if value.ndim == self.ndim - 1:
             # TODO(EA2D): special case not needed with 2D EAs
             value = safe_reshape(value, (1,) + value.shape)
 
@@ -1428,6 +1429,7 @@ class BlockManager(PandasObject):
                         newblk = blk.copy(deep=False)
                         newblk.mgr_locs = slice(mgr_loc, mgr_loc + 1)
                         blocks.append(newblk)
+
                 else:
                     # GH#32779 to avoid the performance penalty of copying,
                     #  we may try to only slice
