@@ -229,10 +229,10 @@ def init_ndarray(values, index, columns, dtype: Optional[DtypeObj], copy: bool):
             # transpose and separate blocks
 
             dvals_list = [maybe_infer_to_datetimelike(row) for row in values]
-            dvals_list = [extract_array(x, extract_numpy=True) for x in dvals_list]  # TODO: unpack DateitmeIndex directly in maybe_infer_to_datetimelike
+            dvals_list = [extract_array(x, extract_numpy=True) for x in dvals_list]
+            # TODO: unpack DateitmeIndex directly in maybe_infer_to_datetimelike
             for n in range(len(dvals_list)):
-                if True:#isinstance(dvals_list[n], np.ndarray):
-                    dvals_list[n] = dvals_list[n].reshape(1, -1)
+                dvals_list[n] = dvals_list[n].reshape(1, -1)
 
             from pandas.core.internals.blocks import make_block
 
@@ -247,7 +247,10 @@ def init_ndarray(values, index, columns, dtype: Optional[DtypeObj], copy: bool):
             block_values = [datelike_vals]
             block_values = [extract_array(x, extract_numpy=True) for x in block_values]
             if values.ndim == 2:
-                block_values = [x if x.ndim == 2 else x.reshape(1, -1) for x in block_values]  # TODO: use block_shape
+                block_values = [
+                    x if x.ndim == 2 else x.reshape(1, -1) for x in block_values
+                ]
+                # TODO: use block_shape
     else:
         block_values = [values]
 

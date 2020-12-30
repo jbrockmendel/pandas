@@ -331,7 +331,7 @@ def _concatenate_join_units(join_units, concat_axis, copy):
         # Only one block, nothing to concatenate.
         concat_values = to_concat[0]
         if copy:
-            if isinstance(concat_values, np.ndarray):  # TODO: or DTA/TDA?
+            if isinstance(concat_values, np.ndarray):
                 # non-reindexed (=not yet copied) arrays are made into a view
                 # in JoinUnit.get_reindexed_values
                 if concat_values.base is not None:

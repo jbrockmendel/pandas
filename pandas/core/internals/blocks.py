@@ -315,7 +315,6 @@ class Block(PandasObject):
         self.mgr_locs = libinternals.BlockPlacement(state[0])
         self.values = state[1]
         self.ndim = self.values.ndim
-        # FIXME: is this wrong for EABlock?  Only reached via test_internals
 
     def _slice(self, slicer):
         """ return a slice of my values """
@@ -1452,6 +1451,7 @@ class Block(PandasObject):
                 make_block(new_values[[i]], placement=[loc])
                 for i, loc in enumerate(new_placement)
             ]
+            # TODO: new_values[slice(i, i+1)]?
         else:
             blocks = [make_block(new_values, placement=new_placement)]
 
