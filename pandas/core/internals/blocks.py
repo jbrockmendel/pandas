@@ -40,7 +40,6 @@ from pandas.core.dtypes.common import (
     is_datetime64_dtype,
     is_datetime64tz_dtype,
     is_dtype_equal,
-    is_strict_ea,
     is_ea_dtype,
     is_extension_array_dtype,
     is_float,
@@ -52,6 +51,7 @@ from pandas.core.dtypes.common import (
     is_re,
     is_re_compilable,
     is_sparse,
+    is_strict_ea,
     pandas_dtype,
 )
 from pandas.core.dtypes.dtypes import CategoricalDtype, ExtensionDtype
@@ -143,7 +143,7 @@ class Block(PandasObject):
                 f"placement implies {len(self.mgr_locs)}"
             )
 
-        if self.is_extension and self.ndim == 2 and len(self.mgr_locs)  > 1:
+        if self.is_extension and self.ndim == 2 and len(self.mgr_locs) > 1:
             raise ValueError("need to split... for now")
 
     def _maybe_coerce_values(self, values):
@@ -1095,6 +1095,7 @@ class Block(PandasObject):
                     # `np.place` on the other hand uses the ``new`` values at it is
                     # to place in the masked locations of ``new_values``
                     np.place(new_values, mask, new)
+                    # i.e. new_values[mask] = new
                 elif mask.shape[-1] == len(new) or len(new) == 1:
                     np.putmask(new_values, mask, new)
                 else:
@@ -1478,7 +1479,10 @@ class Block(PandasObject):
         # TODO: can we make _split_op_result useful here?
         if self.is_extension:
             # For hybrid blocks that ATM can only have length 1
-            blocks = [make_block(new_values[[i]], placement=[loc]) for i, loc in enumerate(new_placement)]
+            blocks = [
+                make_block(new_values[[i]], placement=[loc])
+                for i, loc in enumerate(new_placement)
+            ]
         else:
             blocks = [make_block(new_values, placement=new_placement)]
 
@@ -2084,6 +2088,7 @@ class HybridBlock(Block):
     """
     Block backed by an NDarrayBackedExtensionArray, supporting 2D values.
     """
+
     def array_values(self):
         return self.values
 

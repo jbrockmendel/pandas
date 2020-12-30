@@ -1481,6 +1481,10 @@ def is_extension_type(arr) -> bool:
 
 
 def is_strict_ea(obj):
+    """
+    ExtensionArray that does not support 2D, or more specifically that does
+    not use HybridBlock.
+    """
     from pandas.core.arrays import DatetimeArray, ExtensionArray, TimedeltaArray
 
     return isinstance(obj, ExtensionArray) and not isinstance(
@@ -1490,7 +1494,7 @@ def is_strict_ea(obj):
 
 def is_ea_dtype(dtype) -> bool:
     """
-    Analogue to is_extension_array_dtype but excluding DatetimeArray.
+    Analogue to is_extension_array_dtype but excluding DatetimeTZDtype.
     """
     return is_extension_array_dtype(dtype) and not is_datetime64tz_dtype(dtype)
 

@@ -19,6 +19,7 @@ from pandas.core.dtypes.common import (
     is_float_dtype,
     is_numeric_dtype,
     is_sparse,
+    is_strict_ea,
     is_timedelta64_dtype,
 )
 from pandas.core.dtypes.concat import concat_compat
@@ -95,7 +96,11 @@ def concatenate_block_managers(
                 b = make_block(values, placement=placement, ndim=blk.ndim)
         else:
             new_values = _concatenate_join_units(join_units, concat_axis, copy=copy)
-            if len(axes) == 2 and new_values.ndim == 1 and isinstance(new_values, DatetimeArray):
+            if (
+                len(axes) == 2
+                and new_values.ndim == 1
+                and isinstance(new_values, DatetimeArray)
+            ):
                 # FIXME: so so wrong
                 new_values = new_values.reshape(1, -1)
             b = make_block(new_values, placement=placement, ndim=len(axes))
@@ -350,8 +355,8 @@ def _concatenate_join_units(join_units, concat_axis: int, copy: bool):
         # concatting with at least one EA means we are concatting a single column
         # the non-EA values are 2D arrays with shape (1, n)
         to_concat = [
-            t if (isinstance(t, ExtensionArray) and is_ea_dtype(t))
-            else t[0, :] for t in to_concat
+            t if (isinstance(t, ExtensionArray) and is_ea_dtype(t)) else t[0, :]
+            for t in to_concat
         ]
         concat_values = concat_compat(to_concat, axis=0)
 
@@ -363,7 +368,7 @@ def _concatenate_join_units(join_units, concat_axis: int, copy: bool):
             if concat_values.tz is None:
                 concat_values = np.asarray(concat_values).reshape(1, -1)
 
-        elif not is_ea_dtype(concat_values) or not isinstance(concat_values, ExtensionArray):#: or (isinstance(concat_values, DatetimeArray) and concat_values.tz is None):
+        elif not is_strict_ea(concat_values):
             # if the result of concat is not an EA but an ndarray, reshape to
             # 2D to put it a non-EA Block
             # special case DatetimeArray, which *is* an EA, but is put in a
