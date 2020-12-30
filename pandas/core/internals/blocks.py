@@ -408,7 +408,7 @@ class Block(PandasObject):
             nbs = []
             for i, loc in enumerate(self.mgr_locs):
                 if not is_strict_ea(result):
-                    vals = result[[i]]
+                    vals = result[i : i + 1]
                 else:
                     vals = result[i]
                 block = self.make_block(values=vals, placement=[loc])
@@ -1448,10 +1448,9 @@ class Block(PandasObject):
         if self.is_extension:
             # For hybrid blocks that ATM can only have length 1
             blocks = [
-                make_block(new_values[[i]], placement=[loc])
+                make_block(new_values[i : i + 1], placement=[loc])
                 for i, loc in enumerate(new_placement)
             ]
-            # TODO: new_values[slice(i, i+1)]?
         else:
             blocks = [make_block(new_values, placement=new_placement)]
 
