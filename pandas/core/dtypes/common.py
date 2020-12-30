@@ -1496,6 +1496,8 @@ def is_ea_dtype(dtype) -> bool:
     """
     Analogue to is_extension_array_dtype but excluding DatetimeTZDtype.
     """
+    # Note: if other EA dtypes are ever held in HybridBlock, exclude those
+    #  here too.
     return is_extension_array_dtype(dtype) and not is_datetime64tz_dtype(dtype)
 
 
