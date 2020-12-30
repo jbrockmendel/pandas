@@ -338,17 +338,13 @@ def _concatenate_join_units(join_units, concat_axis, copy):
                     concat_values = concat_values.copy()
             else:
                 concat_values = concat_values.copy()
-    elif all(isinstance(t, DatetimeArray) for t in to_concat):
-        # TODO(EA2D): special case not needed if all EAs used HybridBlocks
-        concat_values = concat_compat(to_concat, axis=concat_axis)
 
     elif any(isinstance(t, ExtensionArray) for t in to_concat):
+        # TODO(EA2D): special case not needed if all EAs used HybridBlocks
+        # NB: we are still assuming here that Hybrid blocks have shape (1, N)
         # concatting with at least one EA means we are concatting a single column
         # the non-EA values are 2D arrays with shape (1, n)
-        to_concat = [
-            t if (isinstance(t, ExtensionArray) and is_ea_dtype(t)) else t[0, :]
-            for t in to_concat
-        ]
+        to_concat = [t if is_strict_ea(t) else t[0, :] for t in to_concat]
         concat_values = concat_compat(to_concat, axis=0)
 
     else:
