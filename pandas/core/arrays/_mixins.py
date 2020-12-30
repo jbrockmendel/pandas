@@ -277,7 +277,6 @@ class NDArrayBackedExtensionArray(ExtensionArray):
 
         if mask.any():
             if method is not None:
-                # FIXME: get_fill_func is for 1D only
                 func = missing.get_fill_func(method, ndim=self.ndim)
                 new_values = func(self._ndarray.copy(), limit=limit, mask=mask)
                 # TODO: PandasArray didn't used to copy, need tests for this
