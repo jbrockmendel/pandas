@@ -3,8 +3,6 @@ from typing import TYPE_CHECKING, Iterator, List, Tuple
 
 from pandas._typing import ArrayLike
 
-from pandas.core.dtypes.common import is_strict_ea
-
 if TYPE_CHECKING:
     from pandas.core.internals.blocks import Block
     from pandas.core.internals.managers import BlockManager
@@ -25,7 +23,7 @@ def _iter_block_pairs(
         locs = blk.mgr_locs
         blk_vals = blk.values
 
-        left_ea = not is_strict_ea(blk_vals)
+        left_ea = blk_vals.ndim == 1
 
         rblks = right._slice_take_blocks_ax0(locs.indexer, only_slice=True)
 
@@ -36,7 +34,7 @@ def _iter_block_pairs(
         #    assert rblks[0].shape[0] == 1, rblks[0].shape
 
         for k, rblk in enumerate(rblks):
-            right_ea = not is_strict_ea(rblk.values)
+            right_ea = rblk.values.ndim == 1
 
             lvals, rvals = _get_same_shape_values(blk, rblk, left_ea, right_ea)
             info = BlockPairInfo(lvals, rvals, locs, left_ea, right_ea, rblk)
