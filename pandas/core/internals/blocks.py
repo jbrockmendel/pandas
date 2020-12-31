@@ -2033,9 +2033,6 @@ class HybridBlock(Block):
     def array_values(self):
         return self.values
 
-    def _putmask_simple(self, mask: np.ndarray, value: Any):
-        self.values.putmask(mask, value)
-
     def where(
         self, other, cond, errors="raise", try_cast: bool = False, axis: int = 0
     ) -> List["Block"]:
@@ -2212,7 +2209,6 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
     __init__ = HybridBlock.__init__
     take_nd = HybridBlock.take_nd
     setitem = HybridBlock.setitem
-    _putmask_simple = HybridBlock._putmask_simple
     where = HybridBlock.where
     _unstack = HybridBlock._unstack
     # TODO: we still share these with ExtensionBlock
