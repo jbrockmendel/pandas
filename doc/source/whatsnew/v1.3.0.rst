@@ -284,13 +284,13 @@ Plotting
 Groupby/resample/rolling
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
--
+- Bug in :meth:`SeriesGroupBy.value_counts` where unobserved categories in a grouped categorical series were not tallied (:issue:`38672`)
 -
 
 Reshaping
 ^^^^^^^^^
 
--
+- Bug in :meth:`DataFrame.unstack` with missing levels led to incorrect index names (:issue:`37510`)
 -
 
 Sparse
