@@ -555,9 +555,7 @@ class BlockManager(PandasObject):
     def isna(self, func) -> "BlockManager":
         return self.apply("apply", func=func)
 
-    def where(
-        self, other, cond, align: bool, errors: str, try_cast: bool, axis: int
-    ) -> "BlockManager":
+    def where(self, other, cond, align: bool, errors: str, axis: int) -> "BlockManager":
         if align:
             align_keys = ["other", "cond"]
         else:
@@ -570,7 +568,6 @@ class BlockManager(PandasObject):
             other=other,
             cond=cond,
             errors=errors,
-            try_cast=try_cast,
             axis=axis,
         )
 
