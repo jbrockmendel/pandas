@@ -2014,8 +2014,6 @@ class HybridBlock(Block):
         # TODO(EA2D): reshape unnecessary with 2D EAs
         arr = self.array_values().reshape(self.shape)
 
-        other, cond = self._maybe_reshape_where_args(arr, other, cond, axis)
-
         try:
             res_values = arr.T.where(cond, other).T
         except (ValueError, TypeError):
