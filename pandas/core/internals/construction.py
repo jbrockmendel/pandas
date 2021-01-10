@@ -48,6 +48,7 @@ from pandas.core.indexes.api import (
     get_objs_combined_axis,
     union_indexes,
 )
+from pandas.core.internals.blocks import _block_shape
 from pandas.core.internals.managers import (
     create_block_manager_from_arrays,
     create_block_manager_from_blocks,
@@ -215,7 +216,7 @@ def init_ndarray(values, index, columns, dtype: Optional[DtypeObj], copy: bool):
 
             dvals_list = [maybe_infer_to_datetimelike(row) for row in values]
             dvals_list = [extract_array(x, extract_numpy=True) for x in dvals_list]
-            # TODO: unpack DateitmeIndex directly in maybe_infer_to_datetimelike
+            # TODO: unpack DatetimeIndex directly in maybe_infer_to_datetimelike
             for n in range(len(dvals_list)):
                 dvals_list[n] = dvals_list[n].reshape(1, -1)
 
@@ -232,10 +233,8 @@ def init_ndarray(values, index, columns, dtype: Optional[DtypeObj], copy: bool):
             block_values = [datelike_vals]
             block_values = [extract_array(x, extract_numpy=True) for x in block_values]
             if values.ndim == 2:
-                block_values = [
-                    x if x.ndim == 2 else x.reshape(1, -1) for x in block_values
-                ]
-                # TODO: use block_shape
+                block_values = [_block_shape(x, 2) for x in block_values]
+
     else:
         block_values = [values]
 

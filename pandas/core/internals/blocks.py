@@ -2019,16 +2019,13 @@ class HybridBlock(Block):
         return self.values
 
     def where(self, other, cond, errors="raise", axis: int = 0) -> List["Block"]:
-        # TODO(EA2D): reshape unnecessary with 2D EAs
-        arr = self.array_values().reshape(self.shape)
+        arr = self.values
 
         try:
             res_values = arr.T.where(cond, other).T
         except (ValueError, TypeError):
             return super().where(other, cond, errors=errors, axis=axis)
 
-        # TODO(EA2D): reshape not needed with 2D EAs
-        res_values = res_values.reshape(self.values.shape)
         nb = self.make_block_same_class(res_values)
         return [nb]
 
@@ -2063,18 +2060,8 @@ class DatetimeLikeBlockMixin(HybridBlock):
         return object dtype as boxed values, such as Timestamps/Timedelta
         """
         if is_object_dtype(dtype):
-            # DTA/TDA constructor and astype can handle 2D
-            return self._holder(self.values).astype(object)
-        return self.values
-
-    def internal_values(self):
-        # Override to return DatetimeArray and TimedeltaArray
-        return self.array_values()
-
-    def iget(self, key):
-        # GH#31649 we need to wrap scalars in Timestamp/Timedelta
-        # TODO(EA2D): this can be removed if we ever have 2D EA
-        return self.array_values().reshape(self.shape)[key]
+            return self.values.astype(object)
+        return np.asarray(self.values)
 
     def diff(self, n: int, axis: int = 0) -> List["Block"]:
         """
@@ -2096,8 +2083,7 @@ class DatetimeLikeBlockMixin(HybridBlock):
         The arguments here are mimicking shift so they are called correctly
         by apply.
         """
-        # TODO(EA2D): reshape not necessary with 2D EAs
-        values = self.array_values().reshape(self.shape)
+        values = self.values
 
         new_values = values - values.shift(n, axis=axis)
         return [
@@ -2106,19 +2092,19 @@ class DatetimeLikeBlockMixin(HybridBlock):
 
     def shift(self, periods, axis=0, fill_value=None):
         # TODO(EA2D) this is unnecessary if these blocks are backed by 2D EAs
-        values = self.array_values()
+        values = self.values
         new_values = values.shift(periods, fill_value=fill_value, axis=axis)
         return self.make_block_same_class(new_values)
 
     def to_native_types(self, na_rep="NaT", **kwargs):
         """ convert to our native types format """
-        arr = self.array_values()
+        arr = self.values
 
         result = arr._format_native_types(na_rep=na_rep, **kwargs)
         return self.make_block(result)
 
     def _can_hold_element(self, element: Any) -> bool:
-        arr = self.array_values()
+        arr = self.values
 
         try:
             arr._validate_setitem_value(element)
@@ -2178,6 +2164,7 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
     _can_hold_na = DatetimeBlock._can_hold_na
     where = DatetimeBlock.where
     shift = DatetimeLikeBlockMixin.shift
+    get_values = DatetimeLikeBlockMixin.get_values
 
     set_inplace = HybridBlock.set_inplace
     array_values = HybridBlock.array_values
@@ -2217,7 +2204,7 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
 
         return values
 
-    def get_values(self, dtype: Optional[Dtype] = None):
+    def __get_values(self, dtype: Optional[Dtype] = None):
         """
         Returns an ndarray of values.
 
