@@ -253,7 +253,7 @@ class Block(PandasObject):
         """
         if is_object_dtype(dtype):
             return self.values.astype(object)
-        return self.values
+        return np.asarray(self.values)
 
     def get_block_values_for_json(self) -> np.ndarray:
         """
@@ -2055,14 +2055,7 @@ class DatetimeLikeBlockMixin(HybridBlock):
 
     _can_hold_na = True
 
-    def get_values(self, dtype: Optional[Dtype] = None):
-        """
-        return object dtype as boxed values, such as Timestamps/Timedelta
-        """
-        if is_object_dtype(dtype):
-            return self.values.astype(object)
-        return np.asarray(self.values)
-
+    # TODO: implement on DTA, then  use Block.diff
     def diff(self, n: int, axis: int = 0) -> List["Block"]:
         """
         1st discrete difference.
@@ -2178,7 +2171,7 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
     where = HybridBlock.where
     _unstack = HybridBlock._unstack
     # TODO: we still share these with ExtensionBlock
-    # ['_can_consolidate', 'interpolate', 'is_extension', 'is_numeric', 'putmask']
+    # ['_can_consolidate', 'interpolate', 'putmask']
 
     _validate_ndim = True
 
@@ -2203,37 +2196,6 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
             raise ValueError("cannot create a DatetimeTZBlock without a tz")
 
         return values
-
-    def __get_values(self, dtype: Optional[Dtype] = None):
-        """
-        Returns an ndarray of values.
-
-        Parameters
-        ----------
-        dtype : np.dtype
-            Only `object`-like dtypes are respected here (not sure
-            why).
-
-        Returns
-        -------
-        values : ndarray
-            When ``dtype=object``, then and object-dtype ndarray of
-            boxed values is returned. Otherwise, an M8[ns] ndarray
-            is returned.
-
-            DatetimeArray is always 1-d. ``get_values`` will reshape
-            the return value to be the same dimensionality as the
-            block.
-        """
-        values = self.values
-        if is_object_dtype(dtype):
-            values = values.astype(object)
-
-        # TODO(EA2D): reshape unnecessary with 2D EAs
-        # Ensure that our shape is correct for DataFrame.
-        # ExtensionArrays are always 1-D, even in a DataFrame when
-        # the analogous NumPy-backed column would be a 2-D ndarray.
-        return np.asarray(values).reshape(self.shape)
 
     def external_values(self):
         # NB: this is different from np.asarray(self.values), since that
