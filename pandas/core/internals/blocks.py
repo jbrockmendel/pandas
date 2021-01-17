@@ -146,9 +146,6 @@ class Block(PandasObject):
                 f"placement implies {len(self.mgr_locs)}"
             )
 
-        if self.is_extension and self.ndim == 2 and len(self.mgr_locs) > 1:
-            raise ValueError("need to split... for now")
-
     def _maybe_coerce_values(self, values):
         """
         Ensure we have correctly-typed values.
@@ -1400,16 +1397,7 @@ class Block(PandasObject):
         new_values = new_values.T[mask]
         new_placement = new_placement[mask]
 
-        # TODO: can we make _split_op_result useful here?
-        if self.is_extension:
-            # For hybrid blocks that ATM can only have length 1
-            blocks = [
-                make_block(new_values[i : i + 1], placement=[loc])
-                for i, loc in enumerate(new_placement)
-            ]
-        else:
-            blocks = [make_block(new_values, placement=new_placement)]
-
+        blocks = [make_block(new_values, placement=new_placement)]
         return blocks, mask
 
     def quantile(self, qs, interpolation="linear", axis: int = 0):
@@ -1559,9 +1547,8 @@ class ExtensionBlock(Block):
                 ndim = 2
         super().__init__(values, placement, ndim=ndim)
 
-        if self.ndim == 2 and len(self.mgr_locs) != 1:
-            # TODO(EA2D): check unnecessary with 2D EAs
-            raise AssertionError("block.size != values.size")
+        if self.ndim == 2 and len(self.mgr_locs) > 1:
+            raise ValueError("need to split... for now")
 
     @property
     def shape(self):
@@ -2015,6 +2002,13 @@ class HybridBlock(Block):
         values[indexer] = value
         return self
 
+    def delete(self, loc) -> None:
+        """
+        Delete given loc(-s) from block in-place.
+        """
+        self.values = self.values.delete(loc, 0)
+        self.mgr_locs = self.mgr_locs.delete(loc)
+
 
 class DatetimeLikeBlockMixin(HybridBlock):
     """Mixin class for DatetimeBlock, DatetimeTZBlock, and TimedeltaBlock."""
@@ -2137,9 +2131,10 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
     where = HybridBlock.where
     _unstack = HybridBlock._unstack
     # TODO: we still share these with ExtensionBlock
-    # ['_can_consolidate', 'interpolate', 'putmask']
+    # ['interpolate', 'putmask']
 
     _validate_ndim = True
+    _can_consolidate = True
 
     def _maybe_coerce_values(self, values):
         """

@@ -1929,7 +1929,11 @@ def _merge_blocks(
         # TODO: optimization potential in case all mgrs contain slices and
         # combination of those slices is a slice, too.
         new_mgr_locs = np.concatenate([b.mgr_locs.as_array for b in blocks])
-        new_values = np.vstack([b.values for b in blocks])
+
+        if isinstance(blocks[0].dtype, np.dtype):
+            new_values = np.vstack([b.values for b in blocks])
+        else:
+            new_values = blocks[0].values._concat_same_type([b.values for b in blocks], axis=0)
 
         argsort = np.argsort(new_mgr_locs)
         new_values = new_values[argsort]

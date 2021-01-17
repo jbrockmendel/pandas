@@ -2942,6 +2942,8 @@ class DataFrame(NDFrame, OpsMixin):
         if self._is_homogeneous_type and dtypes and is_extension_array_dtype(dtypes[0]):
             # We have EAs with the same dtype. We can preserve that dtype in transpose.
             dtype = dtypes[0]
+
+            # TODO: possible fastpath if singe block dt64tz
             arr_type = dtype.construct_array_type()
             values = self.values
 
@@ -2949,6 +2951,7 @@ class DataFrame(NDFrame, OpsMixin):
             result = self._constructor(
                 dict(zip(self.index, new_values)), index=self.columns
             )
+            # TODO: what if index is non-unique?
 
         else:
             new_values = self.values.T

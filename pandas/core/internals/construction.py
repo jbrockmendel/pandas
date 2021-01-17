@@ -49,7 +49,7 @@ from pandas.core.dtypes.generic import (
 )
 
 from pandas.core import algorithms, common as com
-from pandas.core.arrays import Categorical
+from pandas.core.arrays import Categorical, ExtensionArray
 from pandas.core.construction import extract_array, sanitize_array
 from pandas.core.indexes import base as ibase
 from pandas.core.indexes.api import (
@@ -251,6 +251,7 @@ def init_ndarray(values, index, columns, dtype: Optional[DtypeObj], copy: bool):
         if values.ndim == 2 and values.shape[0] != 1:
             # transpose and separate blocks
 
+            # TODO: do this in one go
             dvals_list = [maybe_infer_to_datetimelike(row) for row in values]
             dvals_list = [extract_array(x, extract_numpy=True) for x in dvals_list]
             # TODO: unpack DatetimeIndex directly in maybe_infer_to_datetimelike
@@ -290,7 +291,6 @@ def init_dict(data: Dict, index, columns, dtype: Optional[DtypeObj] = None):
 
         arrays = Series(data, index=columns, dtype=object)
         data_names = arrays.index
-
         missing = arrays.isna()
         if index is None:
             # GH10856
@@ -358,7 +358,7 @@ def treat_as_nested(data) -> bool:
     """
     Check if we should use nested_data_to_arrays.
     """
-    return len(data) > 0 and is_list_like(data[0]) and getattr(data[0], "ndim", 1) == 1
+    return len(data) > 0 and is_list_like(data[0]) and getattr(data[0], "ndim", 1) == 1 and not (isinstance(data, ExtensionArray) and data.ndim == 2)
 
 
 # ---------------------------------------------------------------------
