@@ -1,4 +1,6 @@
 """ miscellaneous sorting / groupby utilities """
+from __future__ import annotations
+
 from collections import defaultdict
 from typing import (
     TYPE_CHECKING,
@@ -426,7 +428,7 @@ def nargminmax(values, method: str, axis: int = 0):
 
 def _ensure_key_mapped_multiindex(
     index: "MultiIndex", key: Callable, level=None
-) -> "MultiIndex":
+) -> MultiIndex:
     """
     Returns a new MultiIndex in which key has been applied
     to all levels specified in level (or all levels if level
