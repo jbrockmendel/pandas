@@ -30,7 +30,7 @@ from pandas.compat import set_function_name
 from pandas.compat.numpy import function as nv
 from pandas.errors import AbstractMethodError
 from pandas.util._decorators import Appender, Substitution
-from pandas.util._validators import validate_fillna_kwargs
+from pandas.util._validators import validate_bool_kwarg, validate_fillna_kwargs
 
 from pandas.core.dtypes.cast import maybe_cast_to_extension_array
 from pandas.core.dtypes.common import (
@@ -603,6 +603,10 @@ class ExtensionArray:
         In case of multiple occurrences of the minimum value, the index
         corresponding to the first occurrence is returned.
 
+        Parameters
+        ----------
+        skipna : bool, default True
+
         Returns
         -------
         int
@@ -611,7 +615,8 @@ class ExtensionArray:
         --------
         ExtensionArray.argmax
         """
-        if not skipna:
+        validate_bool_kwarg(skipna, "skipna")
+        if not skipna and self.isna().any():
             raise NotImplementedError
         return nargminmax(self, "argmin", axis=axis)
 
@@ -622,6 +627,10 @@ class ExtensionArray:
         In case of multiple occurrences of the maximum value, the index
         corresponding to the first occurrence is returned.
 
+        Parameters
+        ----------
+        skipna : bool, default True
+
         Returns
         -------
         int
@@ -630,7 +639,8 @@ class ExtensionArray:
         --------
         ExtensionArray.argmin
         """
-        if not skipna:
+        validate_bool_kwarg(skipna, "skipna")
+        if not skipna and self.isna().any():
             raise NotImplementedError
         return nargminmax(self, "argmax", axis=axis)
 
