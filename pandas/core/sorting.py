@@ -39,7 +39,7 @@ _INT64_MAX = np.iinfo(np.int64).max
 
 
 def get_indexer_indexer(
-    target: "Index",
+    target: Index,
     level: Union[str, int, List[str], List[int]],
     ascending: bool,
     kind: str,
@@ -427,7 +427,7 @@ def nargminmax(values, method: str, axis: int = 0):
 
 
 def _ensure_key_mapped_multiindex(
-    index: "MultiIndex", key: Callable, level=None
+    index: MultiIndex, key: Callable, level=None
 ) -> MultiIndex:
     """
     Returns a new MultiIndex in which key has been applied
@@ -522,7 +522,7 @@ def ensure_key_mapped(values, key: Optional[Callable], levels=None):
 def get_flattened_list(
     comp_ids: np.ndarray,
     ngroups: int,
-    levels: Iterable["Index"],
+    levels: Iterable[Index],
     labels: Iterable[np.ndarray],
 ) -> List[Tuple]:
     """Map compressed group id -> key tuple."""
@@ -537,7 +537,7 @@ def get_flattened_list(
 
 
 def get_indexer_dict(
-    label_list: List[np.ndarray], keys: List["Index"]
+    label_list: List[np.ndarray], keys: List[Index]
 ) -> Dict[Union[str, Tuple], np.ndarray]:
     """
     Returns
