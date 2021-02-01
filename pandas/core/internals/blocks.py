@@ -1986,12 +1986,6 @@ class HybridBlock(Block):
         self.values = self.values.delete(loc, 0)
         self.mgr_locs = self.mgr_locs.delete(loc)
 
-
-class DatetimeLikeBlockMixin(HybridMixin, HybridBlock):
-    """Mixin class for DatetimeBlock, DatetimeTZBlock, and TimedeltaBlock."""
-
-    _can_hold_na = True
-
     # TODO: implement on DTA, then  use Block.diff
     def diff(self, n: int, axis: int = 0) -> List[Block]:
         """
@@ -2016,15 +2010,19 @@ class DatetimeLikeBlockMixin(HybridMixin, HybridBlock):
         values = self.values
 
         new_values = values - values.shift(n, axis=axis)
-        return [
-            TimeDeltaBlock(new_values, placement=self.mgr_locs.indexer, ndim=self.ndim)
-        ]
+        return [self.make_block(new_values)]
 
     def shift(self, periods, axis=0, fill_value=None):
         # TODO(EA2D) this is unnecessary if these blocks are backed by 2D EAs
         values = self.values
         new_values = values.shift(periods, fill_value=fill_value, axis=axis)
         return self.make_block_same_class(new_values)
+
+
+class DatetimeLikeBlockMixin(HybridMixin, HybridBlock):
+    """Mixin class for DatetimeBlock, DatetimeTZBlock, and TimedeltaBlock."""
+
+    _can_hold_na = True
 
     def to_native_types(self, na_rep="NaT", **kwargs):
         """ convert to our native types format """
@@ -2074,27 +2072,30 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
     is_datetimetz = True
     is_extension = True
 
-    internal_values = Block.internal_values
-    _can_hold_element = DatetimeBlock._can_hold_element
-    to_native_types = DatetimeBlock.to_native_types
-    diff = DatetimeBlock.diff
-    fill_value = DatetimeBlock.fill_value
-    where = DatetimeBlock.where
-    shift = DatetimeLikeBlockMixin.shift
-    get_values = DatetimeLikeBlockMixin.get_values
     _holder = DatetimeBlock._holder
+    fill_value = DatetimeBlock.fill_value
 
-    set_inplace = HybridBlock.set_inplace
+    _can_hold_element = HybridMixin._can_hold_element
+
     array_values = HybridBlock.array_values
-    iget = HybridBlock.iget
-    _slice = HybridBlock._slice
-    is_view = HybridBlock.is_view
-    shape = HybridBlock.shape
-    __init__ = HybridBlock.__init__
-    take_nd = HybridBlock.take_nd
-    setitem = HybridBlock.setitem
+    diff = HybridBlock.diff
     where = HybridBlock.where
-    _unstack = HybridBlock._unstack
+    shift = HybridBlock.shift
+    is_view = HybridBlock.is_view
+    setitem = HybridBlock.setitem
+
+    internal_values = Block.internal_values
+    get_values = Block.get_values
+    set_inplace = Block.set_inplace
+    iget = Block.iget
+    _slice = Block._slice
+    shape = Block.shape
+    __init__ = Block.__init__
+    take_nd = Block.take_nd
+    _unstack = Block._unstack
+
+    to_native_types = DatetimeLikeBlockMixin.to_native_types
+
     # TODO: we still share these with ExtensionBlock
     # ['interpolate', 'putmask']
 
