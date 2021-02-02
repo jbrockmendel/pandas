@@ -2950,7 +2950,7 @@ class DataFrame(NDFrame, OpsMixin):
             # We have EAs with the same dtype. We can preserve that dtype in transpose.
             dtype = dtypes[0]
 
-            # TODO: possible fastpath if singe block dt64tz
+            # TODO: possible fastpath if single block dt64tz
             arr_type = dtype.construct_array_type()
             values = self.values
 
@@ -3874,6 +3874,14 @@ class DataFrame(NDFrame, OpsMixin):
            col1  col1  newcol  col2
         0   100     1      99     3
         1   100     2      99     4
+
+        Notice that pandas uses index alignment in case of `value` from type `Series`:
+
+        >>> df.insert(0, "col0", pd.Series([5, 6], index=[1, 2]))
+        >>> df
+           col0  col1  col1  newcol  col2
+        0   NaN   100     1      99     3
+        1   5.0   100     2      99     4
         """
         if allow_duplicates and not self.flags.allows_duplicate_labels:
             raise ValueError(

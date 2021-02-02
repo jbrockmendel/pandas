@@ -1659,8 +1659,25 @@ def take(arr, indices, axis: int = 0, allow_fill: bool = False, fill_value=None)
     return result
 
 
+# TODO: can we de-duplicate with something in dtypes.missing?
+def _get_default_fill_value(dtype, fill_value):
+    if fill_value is lib.no_default:
+        if is_extension_array_dtype(dtype):
+            fill_value = dtype.na_value
+        elif dtype.kind in ["m", "M"]:
+            fill_value = dtype.type("NaT")
+        else:
+            fill_value = np.nan
+    return fill_value
+
+
 def take_nd(
-    arr, indexer, axis: int = 0, out=None, fill_value=np.nan, allow_fill: bool = True
+    arr,
+    indexer,
+    axis: int = 0,
+    out=None,
+    fill_value=lib.no_default,
+    allow_fill: bool = True,
 ):
     """
     Specialized Cython take which sets NaN values in one pass
@@ -1695,11 +1712,15 @@ def take_nd(
     """
     mask_info = None
 
+    fill_value = _get_default_fill_value(arr.dtype, fill_value)
+
     if isinstance(arr, ABCExtensionArray):
         # Check for EA to catch DatetimeArray, TimedeltaArray
         if not is_strict_ea(arr):
             # i.e. DatetimeArray, TimedeltaArray
-            return arr.take(indexer, axis=axis, fill_value=fill_value, allow_fill=allow_fill)
+            return arr.take(
+                indexer, axis=axis, fill_value=fill_value, allow_fill=allow_fill
+            )
         return arr.take(indexer, fill_value=fill_value, allow_fill=allow_fill)
 
     arr = extract_array(arr)

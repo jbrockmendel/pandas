@@ -241,7 +241,7 @@ class Block(PandasObject):
         """
         return PandasArray(self.values)
 
-    def get_values(self, dtype: Optional[Dtype] = None):
+    def get_values(self, dtype: Optional[DtypeObj] = None) -> np.ndarray:
         """
         return an internal format, currently just the ndarray
         this is often overridden to handle to_dense like operations
@@ -284,7 +284,7 @@ class Block(PandasObject):
 
         return make_block(values, placement=placement, ndim=self.ndim)
 
-    def make_block_same_class(self, values, placement=None, ndim=None):
+    def make_block_same_class(self, values, placement=None, ndim=None) -> Block:
         """ Wrap given values in a block of same type as self. """
         if placement is None:
             placement = self.mgr_locs
@@ -320,7 +320,7 @@ class Block(PandasObject):
 
         return self.values[slicer]
 
-    def getitem_block(self, slicer, new_mgr_locs=None):
+    def getitem_block(self, slicer, new_mgr_locs=None) -> Block:
         """
         Perform __getitem__-like, return result as block.
 
@@ -340,11 +340,11 @@ class Block(PandasObject):
         return type(self)._simple_new(new_values, new_mgr_locs, self.ndim)
 
     @property
-    def shape(self):
+    def shape(self) -> Shape:
         return self.values.shape
 
     @property
-    def dtype(self):
+    def dtype(self) -> DtypeObj:
         return self.values.dtype
 
     def iget(self, i):
@@ -1068,7 +1068,7 @@ class Block(PandasObject):
             new_blocks = self.split_and_operate(mask, f, True)
             return new_blocks
 
-    def coerce_to_target_dtype(self, other):
+    def coerce_to_target_dtype(self, other) -> Block:
         """
         coerce the current block to a dtype compat for other
         we will return a block, possibly object, and not raise
@@ -1096,13 +1096,13 @@ class Block(PandasObject):
         coerce: bool = False,
         downcast: Optional[str] = None,
         **kwargs,
-    ):
+    ) -> List[Block]:
 
         inplace = validate_bool_kwarg(inplace, "inplace")
 
         if not self._can_hold_na:
             # If there are no NAs, then interpolate is a no-op
-            return self if inplace else self.copy()
+            return [self] if inplace else [self.copy()]
 
         # a fill na type method
         try:
@@ -1224,7 +1224,9 @@ class Block(PandasObject):
         blocks = [self.make_block_same_class(interp_values)]
         return self._maybe_downcast(blocks, downcast)
 
-    def take_nd(self, indexer, axis: int, new_mgr_locs=None, fill_value=lib.no_default):
+    def take_nd(
+        self, indexer, axis: int, new_mgr_locs=None, fill_value=lib.no_default
+    ) -> Block:
         """
         Take values according to indexer and return them as a block.bb
 
@@ -1261,7 +1263,7 @@ class Block(PandasObject):
         new_values = algos.diff(self.values, n, axis=axis, stacklevel=7)
         return [self.make_block(values=new_values)]
 
-    def shift(self, periods: int, axis: int = 0, fill_value=None):
+    def shift(self, periods: int, axis: int = 0, fill_value: Any = None) -> List[Block]:
         """ shift the block by periods, possibly upcast """
         # convert integer to float if necessary. need to do a lot more than
         # that, handle boolean etc also
@@ -1374,7 +1376,7 @@ class Block(PandasObject):
         blocks = [make_block(new_values, placement=new_placement)]
         return blocks, mask
 
-    def quantile(self, qs, interpolation="linear", axis: int = 0):
+    def quantile(self, qs, interpolation="linear", axis: int = 0) -> Block:
         """
         compute the quantiles of the
 
@@ -1525,7 +1527,7 @@ class ExtensionBlock(Block):
             raise ValueError("need to split... for now")
 
     @property
-    def shape(self):
+    def shape(self) -> Shape:
         # TODO(EA2D): override unnecessary with 2D EAs
         if self.ndim == 1:
             return (len(self.values),)
@@ -1651,7 +1653,7 @@ class ExtensionBlock(Block):
         self.values[indexer] = value
         return self
 
-    def get_values(self, dtype: Optional[Dtype] = None):
+    def get_values(self, dtype: Optional[DtypeObj] = None) -> np.ndarray:
         # ExtensionArrays must be iterable, so this works.
         # TODO(EA2D): reshape not needed with 2D EAs
         return np.asarray(self.values).reshape(self.shape)
@@ -1673,7 +1675,7 @@ class ExtensionBlock(Block):
 
     def take_nd(
         self, indexer, axis: int = 0, new_mgr_locs=None, fill_value=lib.no_default
-    ):
+    ) -> Block:
         """
         Take values according to indexer and return them as a block.
         """
@@ -1737,7 +1739,9 @@ class ExtensionBlock(Block):
 
         return self.values[slicer]
 
-    def fillna(self, value, limit=None, inplace=False, downcast=None):
+    def fillna(
+        self, value, limit=None, inplace: bool = False, downcast=None
+    ) -> List[Block]:
         values = self.values if inplace else self.values.copy()
         values = values.fillna(value=value, limit=limit)
         return [
@@ -1769,9 +1773,7 @@ class ExtensionBlock(Block):
             axis = 0
         return super().diff(n, axis)
 
-    def shift(
-        self, periods: int, axis: int = 0, fill_value: Any = None
-    ) -> List[ExtensionBlock]:
+    def shift(self, periods: int, axis: int = 0, fill_value: Any = None) -> List[Block]:
         """
         Shift the block by `periods`.
 
@@ -2012,11 +2014,11 @@ class HybridBlock(Block):
         new_values = values - values.shift(n, axis=axis)
         return [self.make_block(new_values)]
 
-    def shift(self, periods, axis=0, fill_value=None):
+    def shift(self, periods: int, axis: int = 0, fill_value: Any = None) -> List[Block]:
         # TODO(EA2D) this is unnecessary if these blocks are backed by 2D EAs
         values = self.values
         new_values = values.shift(periods, fill_value=fill_value, axis=axis)
-        return self.make_block_same_class(new_values)
+        return [self.make_block_same_class(new_values)]
 
 
 class DatetimeLikeBlockMixin(HybridMixin, HybridBlock):
@@ -2132,7 +2134,9 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
             return self.values._data
         return np.asarray(self.values.astype("datetime64[ns]", copy=False))
 
-    def fillna(self, value, limit=None, inplace=False, downcast=None):
+    def fillna(
+        self, value, limit=None, inplace: bool = False, downcast=None
+    ) -> List[Block]:
         # We support filling a DatetimeTZ with a `value` whose timezone
         # is different by coercing to object.
         if self._can_hold_element(value):
@@ -2143,7 +2147,7 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
             value, limit=limit, inplace=inplace, downcast=downcast
         )
 
-    def quantile(self, qs, interpolation="linear", axis=0):
+    def quantile(self, qs, interpolation="linear", axis: int = 0) -> Block:
         naive = self.values.view("M8[ns]")
 
         # TODO(EA2D): kludge for 2D block with 1D values
@@ -2198,7 +2202,9 @@ class TimeDeltaBlock(DatetimeLikeBlockMixin):
             values = TimedeltaArray(values)
         return values
 
-    def fillna(self, value, **kwargs):
+    def fillna(
+        self, value, limit=None, inplace: bool = False, downcast=None
+    ) -> List[Block]:
         # TODO(EA2D): if we operated on array_values, TDA.fillna would handle
         #  raising here.
         if is_integer(value):
@@ -2208,7 +2214,7 @@ class TimeDeltaBlock(DatetimeLikeBlockMixin):
                 "longer supported.  To obtain the old behavior, pass "
                 "`pd.Timedelta(seconds=n)` instead."
             )
-        return super().fillna(value, **kwargs)
+        return super().fillna(value, limit=limit, inplace=inplace, downcast=downcast)
 
 
 class ObjectBlock(Block):
@@ -2421,7 +2427,9 @@ def get_block_type(values, dtype: Optional[Dtype] = None):
     return cls
 
 
-def make_block(values, placement, klass=None, ndim=None, dtype: Optional[Dtype] = None):
+def make_block(
+    values, placement, klass=None, ndim=None, dtype: Optional[Dtype] = None
+) -> Block:
     # Ensure that we don't allow PandasArray / PandasDtype in internals.
     # For now, blocks should be backed by ndarrays when possible.
     if isinstance(values, ABCPandasArray):
@@ -2448,7 +2456,7 @@ def make_block(values, placement, klass=None, ndim=None, dtype: Optional[Dtype] 
 # -----------------------------------------------------------------
 
 
-def extend_blocks(result, blocks=None):
+def extend_blocks(result, blocks=None) -> List[Block]:
     """ return a new extended blocks, given the result """
     if blocks is None:
         blocks = []
