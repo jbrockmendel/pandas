@@ -2493,6 +2493,8 @@ def safe_reshape(arr: ArrayLike, new_shape: Shape) -> ArrayLike:
         # Note: this will include TimedeltaArray and tz-naive DatetimeArray
         # TODO(EA2D): special case will be unnecessary with 2D EAs
         arr = extract_array(arr, extract_numpy=True).reshape(new_shape)
+        if type(arr).__name__ == "PandasArray":
+            arr = arr.to_numpy()
     return arr
 
 
