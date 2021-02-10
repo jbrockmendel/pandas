@@ -96,7 +96,8 @@ class TestSetIndex:
         # single level
         res = df.set_index("index")
         exp = DataFrame(
-            data={"a": [0, 1, 2], "b": [3, 4, 5]}, index=Index(di, name="index")._with_freq(None)
+            data={"a": [0, 1, 2], "b": [3, 4, 5]},
+            index=Index(di, name="index")._with_freq(None),
         )
         tm.assert_frame_equal(res, exp)
 

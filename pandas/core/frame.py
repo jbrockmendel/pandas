@@ -2937,11 +2937,22 @@ class DataFrame(NDFrame, OpsMixin):
         # construct the args
 
         dtypes = list(self.dtypes)
-        if self._is_homogeneous_type and dtypes and is_extension_array_dtype(dtypes[0]):
+        if self._mgr.nblocks == 1 and not is_strict_ea(self._mgr.blocks[0].values):
+            # TODO: something like frame.values but that _may_ give an EA
+            blk = self._mgr.blocks[0]
+            new_values = blk.values
+            if copy:
+                new_values = new_values.copy()
+            result = self._constructor(
+                new_values, index=self.columns, columns=self.index
+            )
+
+        elif (
+            self._is_homogeneous_type and dtypes and is_extension_array_dtype(dtypes[0])
+        ):
             # We have EAs with the same dtype. We can preserve that dtype in transpose.
             dtype = dtypes[0]
 
-            # TODO: possible fastpath if single block dt64tz
             arr_type = dtype.construct_array_type()
             values = self.values
 

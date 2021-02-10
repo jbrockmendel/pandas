@@ -5,6 +5,7 @@ from typing import cast
 
 import numpy as np
 
+from pandas._libs import Period
 from pandas._typing import ArrayLike, DtypeObj
 
 from pandas.core.dtypes.cast import find_common_type
@@ -94,7 +95,11 @@ def concat_compat(to_concat, axis: int = 0):
     if non_empties and axis == 0:
         to_concat = non_empties
 
-    kinds = {obj.dtype.kind for obj in to_concat}
+    dtypes = [obj.dtype for obj in to_concat]
+    kinds = {dtype.kind for dtype in dtypes}
+    _contains_datetime = any(
+        dtype.kind in ["m", "M"] or dtype.type is Period for dtype in dtypes
+    )
 
     all_empty = not len(non_empties)
     single_dtype = len({x.dtype for x in to_concat}) == 1
@@ -333,14 +338,5 @@ def _concat_datetime(to_concat, axis=0):
         #  in Timestamp/Timedelta
         return _concatenate_2d([x.astype(object) for x in to_concat], axis=axis)
 
-    if axis == 1:
-        # TODO(EA2D): kludge not necessary with 2D EAs
-        to_concat = [x.reshape(1, -1) if x.ndim == 1 else x for x in to_concat]
-
     result = type(to_concat[0])._concat_same_type(to_concat, axis=axis)
-
-    if result.ndim == 2 and is_extension_array_dtype(result.dtype):
-        # TODO(EA2D): kludge not necessary with 2D EAs
-        assert result.shape[0] == 1
-        result = result[0]
     return result

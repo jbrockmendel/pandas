@@ -49,7 +49,7 @@ from pandas.core.internals.blocks import (
     DatetimeTZBlock,
     ExtensionBlock,
     ObjectValuesExtensionBlock,
-    _block_shape,
+    block_shape,
     extend_blocks,
     get_block_type,
     make_block,
@@ -1704,7 +1704,7 @@ def _form_blocks(arrays, names: Index, axes: List[Index]) -> List[Block]:
     if len(items_dict["DatetimeTZBlock"]):
         dttz_blocks = [
             make_block(
-                _block_shape(extract_array(array), 2),
+                block_shape(extract_array(array), 2),
                 klass=DatetimeTZBlock,
                 placement=i,
                 ndim=2,
