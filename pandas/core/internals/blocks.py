@@ -24,7 +24,6 @@ from pandas.core.dtypes.cast import (
     astype_dt64_to_dt64tz,
     astype_nansafe,
     can_hold_element,
-    convert_scalar_for_putitemlike,
     find_common_type,
     infer_dtype_from,
     maybe_downcast_numeric,
@@ -50,14 +49,18 @@ from pandas.core.dtypes.common import (
 )
 from pandas.core.dtypes.dtypes import CategoricalDtype, ExtensionDtype, PandasDtype
 from pandas.core.dtypes.generic import ABCDataFrame, ABCIndex, ABCPandasArray, ABCSeries
-from pandas.core.dtypes.missing import isna
+from pandas.core.dtypes.missing import is_valid_na_for_dtype, isna
 
 import pandas.core.algorithms as algos
 from pandas.core.array_algos.putmask import (
+    extract_bool_array,
     putmask_inplace,
     putmask_smart,
     putmask_without_repeat,
+    setitem_datetimelike_compat,
+    validate_putmask,
 )
+from pandas.core.array_algos.quantile import quantile_with_mask
 from pandas.core.array_algos.replace import (
     compare_or_regex_search,
     replace_regex,
@@ -81,11 +84,9 @@ from pandas.core.indexers import (
     is_scalar_indexer,
 )
 import pandas.core.missing as missing
-from pandas.core.nanops import nanpercentile
 
 if TYPE_CHECKING:
     from pandas import Float64Index, Index
-    from pandas.core.arrays._mixins import NDArrayBackedExtensionArray
 
 
 class Block(PandasObject):
@@ -430,7 +431,8 @@ class Block(PandasObject):
         inplace = validate_bool_kwarg(inplace, "inplace")
 
         mask = isna(self.values)
-        mask = _extract_bool_array(mask)
+        mask, noop = validate_putmask(self.values, mask)
+
         if limit is not None:
             limit = libalgos.validate_limit(None, limit=limit)
             mask[mask.cumsum(self.ndim - 1) > limit] = False
@@ -447,8 +449,8 @@ class Block(PandasObject):
             # TODO: should be nb._maybe_downcast?
             return self._maybe_downcast([nb], downcast)
 
-        # we can't process the value, but nothing to do
-        if not mask.any():
+        if noop:
+            # we can't process the value, but nothing to do
             return [self] if inplace else [self.copy()]
 
         # operate column-by-column
@@ -851,7 +853,7 @@ class Block(PandasObject):
             # GH#38086 faster if we know we dont need to check for regex
             masks = [missing.mask_missing(self.values, s[0]) for s in pairs]
 
-        masks = [_extract_bool_array(x) for x in masks]
+        masks = [extract_bool_array(x) for x in masks]
 
         rb = [self if inplace else self.copy()]
         for i, (src, dest) in enumerate(pairs):
@@ -973,18 +975,8 @@ class Block(PandasObject):
                 # TODO(EA2D): special case not needed with 2D EA
                 values[indexer] = value.to_numpy(values.dtype).reshape(-1, 1)
 
-        elif self.is_object and not is_ea_value and arr_value.dtype.kind in ["m", "M"]:
-            # https://github.com/numpy/numpy/issues/12550
-            #  numpy will incorrect cast to int if we're not careful
-            if is_list_like(value):
-                value = list(value)
-            else:
-                value = [value] * len(values[indexer])
-
-            values[indexer] = value
-
         else:
-
+            value = setitem_datetimelike_compat(values, len(values[indexer]), value)
             values[indexer] = value
 
         if transpose:
@@ -1009,7 +1001,7 @@ class Block(PandasObject):
         List[Block]
         """
         transpose = self.ndim == 2
-        mask = _extract_bool_array(mask)
+        mask, noop = validate_putmask(self.values.T, mask)
         assert not isinstance(new, (ABCIndex, ABCSeries, ABCDataFrame))
 
         new_values = self.values  # delay copy if possible.
@@ -1019,21 +1011,13 @@ class Block(PandasObject):
             new = self.fill_value
 
         if self._can_hold_element(new):
-            if self.dtype.kind in ["m", "M"]:
-                arr = self.array_values()
-                arr = cast("NDArrayBackedExtensionArray", arr)
-                if transpose:
-                    arr = arr.T
-                arr.putmask(mask, new)
-                return [self]
-
             if transpose:
                 new_values = new_values.T
 
             putmask_without_repeat(new_values, mask, new)
             return [self]
 
-        elif not mask.any():
+        elif noop:
             return [self]
 
         dtype, _ = infer_dtype_from(new)
@@ -1309,9 +1293,13 @@ class Block(PandasObject):
         if transpose:
             values = values.T
 
-        cond = _extract_bool_array(cond)
+        icond, noop = validate_putmask(values, ~cond)
 
-        if cond.ravel("K").all():
+        if is_valid_na_for_dtype(other, self.dtype) and not self.is_object:
+            other = self.fill_value
+
+        if noop:
+            # TODO: avoid the downcasting at the end in this case?
             result = values
         else:
             # see if we can operate on the entire block, or need item-by-item
@@ -1323,23 +1311,14 @@ class Block(PandasObject):
                 blocks = block.where(orig_other, cond, errors=errors, axis=axis)
                 return self._maybe_downcast(blocks, "infer")
 
-            dtype, _ = infer_dtype_from(other, pandas_dtype=True)
-            if dtype.kind in ["m", "M"] and dtype.kind != values.dtype.kind:
-                # expressions.where would cast np.timedelta64 to int
-                if not is_list_like(other):
-                    other = [other] * (~cond).sum()
-                else:
-                    other = list(other)
+            alt = setitem_datetimelike_compat(values, icond.sum(), other)
+            if alt is not other:
                 result = values.copy()
-                np.putmask(result, ~cond, other)
-
+                np.putmask(result, icond, alt)
             else:
-                # convert datetime to datetime64, timedelta to timedelta64
-                other = convert_scalar_for_putitemlike(other, values.dtype)
-
                 # By the time we get here, we should have all Series/Index
                 #  args extracted to ndarray
-                result = expressions.where(cond, values, other)
+                result = expressions.where(~icond, values, other)
 
         if self._can_hold_na or self.ndim == 1:
 
@@ -1349,6 +1328,7 @@ class Block(PandasObject):
             return [self.make_block(result)]
 
         # might need to separate out blocks
+        cond = ~icond
         axis = cond.ndim - 1
         cond = cond.swapaxes(axis, 0)
         mask = np.array([cond[i].all() for i in range(cond.shape[0])], dtype=bool)
@@ -1418,31 +1398,11 @@ class Block(PandasObject):
         assert axis == 1  # only ever called this way
         assert is_list_like(qs)  # caller is responsible for this
 
-        values = self.get_values()
+        fill_value = self.fill_value
+        values = self.values
+        mask = np.asarray(isna(values))
 
-        is_empty = values.shape[axis] == 0
-
-        if is_empty:
-            # create the array of na_values
-            # 2d len(values) * len(qs)
-            result = np.repeat(
-                np.array([self.fill_value] * len(qs)), len(values)
-            ).reshape(len(values), len(qs))
-        else:
-            # asarray needed for Sparse, see GH#24600
-            mask = np.asarray(isna(values))
-            result = nanpercentile(
-                values,
-                np.array(qs) * 100,
-                axis=axis,
-                na_value=self.fill_value,
-                mask=mask,
-                ndim=values.ndim,
-                interpolation=interpolation,
-            )
-
-            result = np.array(result, copy=False)
-            result = result.T
+        result = quantile_with_mask(values, mask, fill_value, qs, interpolation, axis)
 
         return make_block(result, placement=self.mgr_locs, ndim=2)
 
@@ -1574,7 +1534,7 @@ class ExtensionBlock(Block):
         """
         See Block.putmask.__doc__
         """
-        mask = _extract_bool_array(mask)
+        mask = extract_bool_array(mask)
 
         new_values = self.values
 
@@ -1804,7 +1764,7 @@ class ExtensionBlock(Block):
 
     def where(self, other, cond, errors="raise", axis: int = 0) -> List[Block]:
 
-        cond = _extract_bool_array(cond)
+        cond = extract_bool_array(cond)
         assert not isinstance(other, (ABCIndex, ABCSeries, ABCDataFrame))
 
         if isinstance(other, np.ndarray) and other.ndim == 2:
@@ -1871,6 +1831,28 @@ class ExtensionBlock(Block):
             for indices, place in zip(new_values.T, new_placement)
         ]
         return blocks, mask
+
+    def quantile(self, qs, interpolation="linear", axis: int = 0) -> Block:
+        # asarray needed for Sparse, see GH#24600
+        mask = np.asarray(isna(self.values))
+        mask = np.atleast_2d(mask)
+
+        values, fill_value = self.values._values_for_factorize()
+
+        values = np.atleast_2d(values)
+
+        result = quantile_with_mask(values, mask, fill_value, qs, interpolation, axis)
+
+        if not is_sparse(self.dtype):
+            if self.values.ndim == 1:
+                # shape[0] should be 1 as long as EAs are 1D
+                assert result.shape == (1, len(qs)), result.shape
+                result = type(self.values)._from_factorized(result[0], self.values)
+            else:
+                # HybridBlock, e.g. DatetimeTZBlock
+                result = type(self.values)._from_factorized(result, self.values)
+
+        return make_block(result, placement=self.mgr_locs, ndim=2)
 
 
 class HybridMixin:
@@ -1963,6 +1945,16 @@ class HybridBlock(Block):
 
     def array_values(self):
         return self.values
+
+    def putmask(self, mask, new) -> List[Block]:
+        mask = extract_bool_array(mask)
+
+        if not self._can_hold_element(new):
+            return self.astype(object).putmask(mask, new)
+
+        arr = self.values
+        arr.T.putmask(mask, new)
+        return [self]
 
     def where(self, other, cond, errors="raise", axis: int = 0) -> List[Block]:
         arr = self.values
@@ -2096,6 +2088,7 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
     array_values = HybridBlock.array_values
     diff = HybridBlock.diff
     where = HybridBlock.where
+    putmask = HybridBlock.putmask
     shift = HybridBlock.shift
     is_view = HybridBlock.is_view
     setitem = HybridBlock.setitem
@@ -2113,7 +2106,7 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
     to_native_types = DatetimeLikeBlockMixin.to_native_types
 
     # TODO: we still share these with ExtensionBlock
-    # ['interpolate', 'putmask']
+    # ['interpolate']
 
     _validate_ndim = True
     _can_consolidate = True
@@ -2160,22 +2153,6 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
         return self.astype(object).fillna(
             value, limit=limit, inplace=inplace, downcast=downcast
         )
-
-    def quantile(
-        self, qs: Float64Index, interpolation="linear", axis: int = 0
-    ) -> Block:
-        assert axis == 1  # only ever called this way
-        naive = self.values.view("M8[ns]")
-
-        # TODO(EA2D): kludge for 2D block with 1D values
-        naive = naive.reshape(self.shape)
-
-        blk = self.make_block(naive)
-        res_blk = blk.quantile(qs, interpolation=interpolation, axis=axis)
-
-        # TODO(EA2D): ravel is kludge for 2D block with 1D values, assumes column-like
-        aware = self._holder(res_blk.values, dtype=self.dtype)
-        return self.make_block_same_class(aware, ndim=res_blk.ndim)
 
     def _check_ndim(self, values, ndim):
         """
@@ -2496,18 +2473,3 @@ def safe_reshape(arr: ArrayLike, new_shape: Shape) -> ArrayLike:
         if type(arr).__name__ == "PandasArray":
             arr = arr.to_numpy()
     return arr
-
-
-def _extract_bool_array(mask: ArrayLike) -> np.ndarray:
-    """
-    If we have a SparseArray or BooleanArray, convert it to ndarray[bool].
-    """
-    if isinstance(mask, ExtensionArray):
-        # We could have BooleanArray, Sparse[bool], ...
-        #  Except for BooleanArray, this is equivalent to just
-        #  np.asarray(mask, dtype=bool)
-        mask = mask.to_numpy(dtype=bool, na_value=False)
-
-    assert isinstance(mask, np.ndarray), type(mask)
-    assert mask.dtype == bool, mask.dtype
-    return mask
