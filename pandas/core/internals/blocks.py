@@ -2003,7 +2003,6 @@ class HybridBlock(Block):
         self.values = self.values.delete(loc, 0)
         self.mgr_locs = self.mgr_locs.delete(loc)
 
-    # TODO: implement on DTA, then  use Block.diff
     def diff(self, n: int, axis: int = 0) -> List[Block]:
         """
         1st discrete difference.
