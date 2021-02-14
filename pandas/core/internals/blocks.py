@@ -921,11 +921,6 @@ class Block(PandasObject):
             # current dtype cannot store value, coerce to common dtype
             return self.coerce_to_target_dtype(value).setitem(indexer, value)
 
-        if self.dtype.kind in ["m", "M"]:
-            arr = self.array_values().T
-            arr[indexer] = value
-            return self
-
         # value must be storable at this moment
         if is_extension_array_dtype(getattr(value, "dtype", None)):
             # We need to be careful not to allow through strings that
