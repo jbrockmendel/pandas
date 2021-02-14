@@ -1962,7 +1962,7 @@ class HybridBlock(Block):
         try:
             res_values = arr.T.where(cond, other).T
         except (ValueError, TypeError):
-            return super().where(other, cond, errors=errors, axis=axis)
+            return Block.where(self, other, cond, errors=errors, axis=axis)
 
         nb = self.make_block_same_class(res_values)
         return [nb]
@@ -2070,7 +2070,7 @@ class DatetimeBlock(DatetimeLikeBlockMixin):
         return values
 
 
-class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
+class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
     """ implement a datetime64 block with a tz attribute """
 
     values: DatetimeArray
@@ -2144,7 +2144,7 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
         # We support filling a DatetimeTZ with a `value` whose timezone
         # is different by coercing to object.
         if self._can_hold_element(value):
-            return super().fillna(value, limit, inplace, downcast)
+            return ExtensionBlock.fillna(self, value, limit, inplace, downcast)
 
         # different timezones, or a non-tz
         return self.astype(object).fillna(
