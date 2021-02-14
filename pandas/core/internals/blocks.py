@@ -2021,7 +2021,6 @@ class HybridBlock(Block):
         return [self.make_block(new_values)]
 
     def shift(self, periods: int, axis: int = 0, fill_value: Any = None) -> List[Block]:
-        # TODO(EA2D) this is unnecessary if these blocks are backed by 2D EAs
         values = self.values
         new_values = values.shift(periods, fill_value=fill_value, axis=axis)
         return [self.make_block_same_class(new_values)]
@@ -2136,10 +2135,8 @@ class DatetimeTZBlock(ExtensionBlock, DatetimeBlock):
     def external_values(self):
         # NB: this is different from np.asarray(self.values), since that
         #  return an object-dtype ndarray of Timestamps.
-        if self.is_datetimetz:
-            # avoid FutureWarning in .astype in casting from dt64t to dt64
-            return self.values._data
-        return np.asarray(self.values.astype("datetime64[ns]", copy=False))
+        # avoid FutureWarning in .astype in casting from dt64t to dt64
+        return self.values._data
 
     def fillna(
         self, value, limit=None, inplace: bool = False, downcast=None
