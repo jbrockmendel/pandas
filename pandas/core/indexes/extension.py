@@ -297,7 +297,7 @@ class ExtensionIndex(Index):
             return self.copy()
 
         if isinstance(dtype, np.dtype) and dtype.kind == "M" and dtype != "M8[ns]":
-            # FIXME: kludge
+            # For now Datetime supports this by unwrapping ndarray, but DTI doesn't
             raise TypeError(f"Cannot cast {type(self._data).__name__} to dtype")
 
         new_values = self._data.astype(dtype, copy=copy)

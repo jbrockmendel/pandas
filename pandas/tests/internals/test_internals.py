@@ -472,7 +472,7 @@ class TestBlockManager:
         # coerce all
         mgr = create_mgr("c: f4; d: f2; e: f8")
 
-        warn = FutureWarning if t in ["int64", "int32"] else None
+        warn = FutureWarning if t == "int64" else None
         # datetimelike.astype(int64) deprecated
 
         t = np.dtype(t)
@@ -494,11 +494,7 @@ class TestBlockManager:
 
         assert tmgr.iget(0).dtype.type == np.object_
         assert tmgr.iget(1).dtype.type == np.object_
-        if t == np.int32:
-            # FIXME: whats the actual _desired_ behavior?
-            assert tmgr.iget(3).dtype.type == np.int64
-        elif t in [np.float16, np.float32, np.float64]:
-            # FIXME: whats the actual _desired_ behavior?
+        if t != np.int64:
             assert tmgr.iget(3).dtype.type == np.datetime64
         else:
             assert tmgr.iget(3).dtype.type == t

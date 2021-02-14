@@ -808,10 +808,9 @@ class TestSeriesConstructors:
             dts.astype("int64")
 
         # invalid casting
-        # msg = r"cannot astype a datetimelike from \[datetime64\[ns\]\] to \[int32\]"
-        # FIXME: reenable
-        # with pytest.raises(TypeError, match=msg):
-        #    dts.astype("int32")
+        msg = r"cannot astype a datetimelike from \[datetime64\[ns\]\] to \[int32\]"
+        with pytest.raises(TypeError, match=msg):
+            dts.astype("int32")
 
         # ints are ok
         # we test with np.int64 to get similar results on
@@ -1308,9 +1307,8 @@ class TestSeriesConstructors:
 
         # invalid casting
         msg = r"cannot astype a datetimelike from \[timedelta64\[ns\]\] to \[int32\]"
-        # FIXME: reenable
-        # with pytest.raises(TypeError, match=msg):
-        #    td.astype("int32")
+        with pytest.raises(TypeError, match=msg):
+            td.astype("int32")
 
         # this is an invalid casting
         msg = "Could not convert object to NumPy timedelta"

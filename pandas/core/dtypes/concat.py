@@ -124,7 +124,7 @@ def concat_compat(to_concat, axis: int = 0, ea_compat_axis: bool = False):
         else:
             return np.concatenate(to_concat, axis=axis)
 
-    elif any(kind in ["m", "M"] for kind in kinds):
+    elif _contains_datetime:
         return _concat_datetime(to_concat, axis=axis)
 
     elif all_empty:
