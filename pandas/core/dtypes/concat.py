@@ -5,7 +5,6 @@ from typing import cast
 
 import numpy as np
 
-from pandas._libs import Period
 from pandas._typing import ArrayLike, DtypeObj
 
 from pandas.core.dtypes.cast import find_common_type
@@ -99,11 +98,8 @@ def concat_compat(to_concat, axis: int = 0, ea_compat_axis: bool = False):
         # ea_compat_axis see GH#39574
         to_concat = non_empties
 
-    dtypes = [obj.dtype for obj in to_concat]
-    kinds = {dtype.kind for dtype in dtypes}
-    _contains_datetime = any(
-        dtype.kind in ["m", "M"] or dtype.type is Period for dtype in dtypes
-    )
+    kinds = {obj.dtype.kind for obj in to_concat}
+    _contains_datetime = any(kind in ["m", "M"] for kind in kinds)
 
     all_empty = not len(non_empties)
     single_dtype = len({x.dtype for x in to_concat}) == 1
