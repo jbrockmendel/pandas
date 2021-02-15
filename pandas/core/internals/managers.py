@@ -1153,8 +1153,7 @@ class BlockManager(DataManager):
 
         if value.ndim == 2:
             value = value.T
-
-        if value.ndim == self.ndim - 1:
+        elif value.ndim == self.ndim - 1:
             # TODO(EA2D): special case not needed with 2D EAs
             value = safe_reshape(value, (1,) + value.shape)
 
