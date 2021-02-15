@@ -2035,6 +2035,8 @@ class DatetimeLikeBlockMixin(HybridMixin, HybridBlock):
     """Mixin class for DatetimeBlock, DatetimeTZBlock, and TimedeltaBlock."""
 
     _can_hold_na = True
+    _dtype: np.dtype
+    _holder: Type[Union[DatetimeArray, TimedeltaArray]]
 
     def to_native_types(self, na_rep="NaT", **kwargs):
         """ convert to our native types format """
@@ -2169,9 +2171,9 @@ class TimeDeltaBlock(DatetimeLikeBlockMixin):
     __slots__ = ()
     is_timedelta = True
     is_numeric = False
+    _holder = TimedeltaArray
     fill_value = np.timedelta64("NaT", "ns")
     _dtype = fill_value.dtype
-    _holder = TimedeltaArray
 
     def fillna(
         self, value, limit=None, inplace: bool = False, downcast=None
