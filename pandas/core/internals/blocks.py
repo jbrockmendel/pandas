@@ -16,7 +16,6 @@ from pandas._libs import (
     writers,
 )
 from pandas._libs.internals import BlockPlacement
-from pandas._libs.tslibs import conversion
 from pandas._typing import ArrayLike, Dtype, DtypeObj, Shape
 from pandas.util._validators import validate_bool_kwarg
 
@@ -32,8 +31,6 @@ from pandas.core.dtypes.cast import (
     soft_convert_objects,
 )
 from pandas.core.dtypes.common import (
-    DT64NS_DTYPE,
-    TD64NS_DTYPE,
     is_categorical_dtype,
     is_datetime64_dtype,
     is_datetime64tz_dtype,
@@ -145,7 +142,8 @@ class Block(PandasObject):
                 f"placement implies {len(self.mgr_locs)}"
             )
 
-    def _maybe_coerce_values(self, values):
+    @classmethod
+    def _maybe_coerce_values(cls, values):
         """
         Ensure we have correctly-typed values.
 
@@ -1550,7 +1548,8 @@ class ExtensionBlock(Block):
         new_values[mask] = new
         return [self.make_block(values=new_values)]
 
-    def _maybe_coerce_values(self, values):
+    @classmethod
+    def _maybe_coerce_values(cls, values):
         """
         Unbox to an extension array.
 
@@ -2041,14 +2040,8 @@ class DatetimeLikeBlockMixin(HybridMixin, HybridBlock):
         result = arr._format_native_types(na_rep=na_rep, **kwargs)
         return self.make_block(result)
 
-
-class DatetimeBlock(DatetimeLikeBlockMixin):
-    __slots__ = ()
-    is_datetime = True
-    fill_value = np.datetime64("NaT", "ns")
-    _holder = DatetimeArray
-
-    def _maybe_coerce_values(self, values):
+    @classmethod
+    def _maybe_coerce_values(cls, values):
         """
         Input validation for values passed to __init__. Ensure that
         we have datetime64ns, coercing if necessary.
@@ -2064,13 +2057,26 @@ class DatetimeBlock(DatetimeLikeBlockMixin):
 
         Overridden by DatetimeTZBlock.
         """
-        if values.dtype != DT64NS_DTYPE:
-            values = conversion.ensure_datetime64ns(values)
+        if values.dtype != cls._dtype:
+            # non-nano we will convert to nano
+            if values.dtype.kind != cls._dtype.kind:
+                # caller is responsible for ensuring td64/dt64 dtype
+                raise TypeError(values.dtype)  # pragma: no cover
 
-        if not isinstance(values, DatetimeArray):
-            values = DatetimeArray(values)
+            values = cls._holder._from_sequence(values)
+
+        if not isinstance(values, cls._holder):
+            values = cls._holder(values)
 
         return values
+
+
+class DatetimeBlock(DatetimeLikeBlockMixin):
+    __slots__ = ()
+    is_datetime = True
+    fill_value = np.datetime64("NaT", "ns")
+    _dtype = fill_value.dtype
+    _holder = DatetimeArray
 
 
 class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
@@ -2113,7 +2119,8 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
     _validate_ndim = True
     _can_consolidate = True
 
-    def _maybe_coerce_values(self, values):
+    @classmethod
+    def _maybe_coerce_values(cls, values):
         """
         Input validation for values passed to __init__. Ensure that
         we have datetime64TZ, coercing if necessary.
@@ -2127,8 +2134,8 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
         -------
         values : DatetimeArray
         """
-        if not isinstance(values, self._holder):
-            values = self._holder(values)
+        if not isinstance(values, cls._holder):
+            values = cls._holder(values)
 
         if values.tz is None:
             raise ValueError("cannot create a DatetimeTZBlock without a tz")
@@ -2182,19 +2189,8 @@ class TimeDeltaBlock(DatetimeLikeBlockMixin):
     is_timedelta = True
     is_numeric = False
     fill_value = np.timedelta64("NaT", "ns")
+    _dtype = fill_value.dtype
     _holder = TimedeltaArray
-
-    def _maybe_coerce_values(self, values):
-        if values.dtype != TD64NS_DTYPE:
-            # non-nano we will convert to nano
-            if values.dtype.kind != "m":
-                # caller is responsible for ensuring timedelta64 dtype
-                raise TypeError(values.dtype)  # pragma: no cover
-
-            values = TimedeltaArray._from_sequence(values)
-        if not isinstance(values, TimedeltaArray):
-            values = TimedeltaArray(values)
-        return values
 
     def fillna(
         self, value, limit=None, inplace: bool = False, downcast=None
@@ -2216,7 +2212,8 @@ class ObjectBlock(Block):
     is_object = True
     _can_hold_na = True
 
-    def _maybe_coerce_values(self, values):
+    @classmethod
+    def _maybe_coerce_values(cls, values):
         if issubclass(values.dtype.type, str):
             values = np.array(values, dtype=object)
         return values
