@@ -8,6 +8,7 @@ import numpy as np
 
 from pandas._libs import (
     Interval,
+    NaT,
     Period,
     Timestamp,
     algos as libalgos,
@@ -2094,7 +2095,7 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
     is_extension = True
 
     _holder = DatetimeBlock._holder
-    fill_value = DatetimeBlock.fill_value
+    fill_value = NaT
 
     _can_hold_element = HybridMixin._can_hold_element
 
