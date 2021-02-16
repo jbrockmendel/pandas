@@ -2,14 +2,26 @@
 Common type operations.
 """
 
-from typing import Any, Callable, Union
+from typing import (
+    Any,
+    Callable,
+    Union,
+)
 import warnings
 
 import numpy as np
 
-from pandas._libs import Interval, Period, algos
+from pandas._libs import (
+    Interval,
+    Period,
+    algos,
+)
 from pandas._libs.tslibs import conversion
-from pandas._typing import ArrayLike, DtypeObj, Optional
+from pandas._typing import (
+    ArrayLike,
+    DtypeObj,
+    Optional,
+)
 
 from pandas.core.dtypes.base import registry
 from pandas.core.dtypes.dtypes import (
@@ -19,7 +31,10 @@ from pandas.core.dtypes.dtypes import (
     IntervalDtype,
     PeriodDtype,
 )
-from pandas.core.dtypes.generic import ABCCategorical, ABCIndex
+from pandas.core.dtypes.generic import (
+    ABCCategorical,
+    ABCIndex,
+)
 from pandas.core.dtypes.inference import (  # noqa:F401
     is_array_like,
     is_bool,
@@ -1485,7 +1500,11 @@ def is_strict_ea(obj):
     ExtensionArray that does not support 2D, or more specifically that does
     not use HybridBlock.
     """
-    from pandas.core.arrays import DatetimeArray, ExtensionArray, TimedeltaArray
+    from pandas.core.arrays import (
+        DatetimeArray,
+        ExtensionArray,
+        TimedeltaArray,
+    )
 
     return isinstance(obj, ExtensionArray) and not isinstance(
         obj, (DatetimeArray, TimedeltaArray)
