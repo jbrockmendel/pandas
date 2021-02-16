@@ -295,9 +295,7 @@ class JoinUnit:
                     if len(values) and values[0] is None:
                         fill_value = None
 
-                if is_datetime64tz_dtype(blk_dtype) or is_datetime64tz_dtype(
-                    empty_dtype
-                ):
+                if is_datetime64tz_dtype(empty_dtype):
                     i8values = np.full(self.shape, fill_value.value)
                     return DatetimeArray(i8values, dtype=empty_dtype)
                 elif is_categorical_dtype(blk_dtype):
@@ -305,9 +303,8 @@ class JoinUnit:
                 elif is_extension_array_dtype(blk_dtype):
                     pass
                 elif is_ea_dtype(empty_dtype):
-                    missing_arr = empty_dtype.construct_array_type()._from_sequence(
-                        [], dtype=empty_dtype
-                    )
+                    cls = empty_dtype.construct_array_type()
+                    missing_arr = cls._from_sequence([], dtype=empty_dtype)
                     ncols, nrows = self.shape
                     assert ncols == 1, ncols
                     empty_arr = -1 * np.ones((nrows,), dtype=np.intp)
