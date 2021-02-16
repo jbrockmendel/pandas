@@ -2156,9 +2156,8 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
         -------
         values : DatetimeArray
         """
-        if not isinstance(values, cls._holder):
-            assert isinstance(values, ABCIndex), type(values)  # just checking
-            values = cls._holder(values)
+        values = extract_array(values, extract_numpy=True)
+        assert isinstance(values, cls._holder)
 
         if values.tz is None:
             raise ValueError("cannot create a DatetimeTZBlock without a tz")
