@@ -2050,6 +2050,7 @@ class HybridBlock(Block):
 class DatetimeLikeBlockMixin(HybridMixin, HybridBlock):
     """Mixin class for DatetimeBlock, DatetimeTZBlock, and TimedeltaBlock."""
 
+    is_numeric = False
     _can_hold_na = True
     _dtype: np.dtype
     _holder: Type[Union[DatetimeArray, TimedeltaArray]]
@@ -2136,7 +2137,10 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
     to_native_types = DatetimeLikeBlockMixin.to_native_types
 
     # TODO: we still share these with ExtensionBlock
-    # ['interpolate']
+    # ['interpolate', 'quantile']
+    # [x for x in dir(DatetimeTZBlock) if hasattr(ExtensionBlock, x)
+    #  and getattr(DatetimeTZBlock, x) is getattr(ExtensionBlock, x)
+    #  and getattr(ExtensionBlock, x) is not getattr(Block, x)]
 
     _validate_ndim = True
     _can_consolidate = True
@@ -2174,7 +2178,6 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
 class TimeDeltaBlock(DatetimeLikeBlockMixin):
     __slots__ = ()
     is_timedelta = True
-    is_numeric = False
     _holder = TimedeltaArray
     fill_value = np.timedelta64("NaT", "ns")
     _dtype = fill_value.dtype
