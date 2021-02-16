@@ -2092,7 +2092,7 @@ class DatetimeLikeBlockMixin(NDArrayBackedExtensionBlock):
 
         Overridden by DatetimeTZBlock.
         """
-        if values.dtype != cls._dtype:
+        if cls.fill_value is not NaT and values.dtype != cls._dtype:
             # non-nano we will convert to nano
             if values.dtype.kind != cls._dtype.kind:
                 # caller is responsible for ensuring td64/dt64 dtype
@@ -2112,7 +2112,9 @@ class DatetimeLikeBlockMixin(NDArrayBackedExtensionBlock):
         return self.make_block(result)
 
     def external_values(self):
-        return np.asarray(self.values)
+        # NB: for dt64tz this is different from np.asarray(self.values),
+        #  since that return an object-dtype ndarray of Timestamps.
+        return self.values._data
 
 
 class DatetimeBlock(DatetimeLikeBlockMixin):
@@ -2145,40 +2147,11 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
     take_nd = Block.take_nd
     _unstack = Block._unstack
 
-    # TODO: we still share these with ExtensionBlock
+    # TODO: we still share these with ExtensionBlock (and not DatetimeBlock)
     # ['interpolate', 'quantile']
     # [x for x in dir(DatetimeTZBlock) if hasattr(ExtensionBlock, x)
     #  and getattr(DatetimeTZBlock, x) is getattr(ExtensionBlock, x)
     #  and getattr(ExtensionBlock, x) is not getattr(Block, x)]
-
-    @classmethod
-    def _maybe_coerce_values(cls, values):
-        """
-        Input validation for values passed to __init__. Ensure that
-        we have datetime64TZ, coercing if necessary.
-
-        Parameters
-        ----------
-        values : array-like
-            Must be convertible to datetime64
-
-        Returns
-        -------
-        values : DatetimeArray
-        """
-        values = extract_array(values, extract_numpy=True)
-        assert isinstance(values, cls._holder)
-
-        if values.tz is None:
-            raise ValueError("cannot create a DatetimeTZBlock without a tz")
-
-        return values
-
-    def external_values(self):
-        # NB: this is different from np.asarray(self.values), since that
-        #  return an object-dtype ndarray of Timestamps.
-        # Avoid FutureWarning in .astype in casting from dt64tz to dt64
-        return self.values._data
 
 
 class TimeDeltaBlock(DatetimeLikeBlockMixin):
