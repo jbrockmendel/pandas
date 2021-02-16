@@ -46,6 +46,7 @@ from pandas.core.dtypes.common import (
     ensure_platform_int,
     is_bool,
     is_categorical_dtype,
+    is_dict_like,
     is_integer_dtype,
     is_interval_dtype,
     is_numeric_dtype,
@@ -969,8 +970,8 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         func = maybe_mangle_lambdas(func)
 
         op = GroupByApply(self, func, args, kwargs)
-        result, how = op.agg()
-        if how is None:
+        result = op.agg()
+        if not is_dict_like(func) and result is not None:
             return result
 
         if result is None:
@@ -989,7 +990,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
 
                 # try to treat as if we are passing a list
                 try:
-                    result, _ = GroupByApply(
+                    result = GroupByApply(
                         self, [func], args=(), kwargs={"_axis": self.axis}
                     ).agg()
 
