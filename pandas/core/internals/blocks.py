@@ -2031,6 +2031,21 @@ class HybridBlock(Block):
         new_values = values.shift(periods, fill_value=fill_value, axis=axis)
         return [self.make_block_same_class(new_values)]
 
+    def fillna(
+        self, value, limit=None, inplace: bool = False, downcast=None
+    ) -> List[Block]:
+
+        if not self._can_hold_element(value) and self.dtype.kind != "m":
+            # We support filling a DatetimeTZ with a `value` whose timezone
+            #  is different by coercing to object.
+            # TODO: don't special-case td64
+            return self.astype(object).fillna(value, limit, inplace, downcast)
+
+        values = self.values
+        values = values if inplace else values.copy()
+        new_values = values.fillna(value=value, limit=limit)
+        return [self.make_block_same_class(values=new_values)]
+
 
 class DatetimeLikeBlockMixin(HybridMixin, HybridBlock):
     """Mixin class for DatetimeBlock, DatetimeTZBlock, and TimedeltaBlock."""
@@ -2106,6 +2121,7 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
     shift = HybridBlock.shift
     is_view = HybridBlock.is_view
     setitem = HybridBlock.setitem
+    fillna = HybridBlock.fillna
 
     internal_values = Block.internal_values
     get_values = Block.get_values
@@ -2141,6 +2157,7 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
         values : DatetimeArray
         """
         if not isinstance(values, cls._holder):
+            assert isinstance(values, ABCIndex), type(values)  # just checking
             values = cls._holder(values)
 
         if values.tz is None:
@@ -2154,19 +2171,6 @@ class DatetimeTZBlock(DatetimeBlock, ExtensionBlock):
         # avoid FutureWarning in .astype in casting from dt64t to dt64
         return self.values._data
 
-    def fillna(
-        self, value, limit=None, inplace: bool = False, downcast=None
-    ) -> List[Block]:
-        # We support filling a DatetimeTZ with a `value` whose timezone
-        # is different by coercing to object.
-        if self._can_hold_element(value):
-            return ExtensionBlock.fillna(self, value, limit, inplace, downcast)
-
-        # different timezones, or a non-tz
-        return self.astype(object).fillna(
-            value, limit=limit, inplace=inplace, downcast=downcast
-        )
-
 
 class TimeDeltaBlock(DatetimeLikeBlockMixin):
     __slots__ = ()
@@ -2175,14 +2179,6 @@ class TimeDeltaBlock(DatetimeLikeBlockMixin):
     _holder = TimedeltaArray
     fill_value = np.timedelta64("NaT", "ns")
     _dtype = fill_value.dtype
-
-    def fillna(
-        self, value, limit=None, inplace: bool = False, downcast=None
-    ) -> List[Block]:
-        values = self.array_values()
-        values = values if inplace else values.copy()
-        new_values = values.fillna(value=value, limit=limit)
-        return [self.make_block_same_class(values=new_values)]
 
 
 class ObjectBlock(Block):
