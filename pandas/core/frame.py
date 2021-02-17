@@ -2987,6 +2987,7 @@ class DataFrame(NDFrame, OpsMixin):
 
         dtypes = list(self.dtypes)
         if self._mgr.nblocks == 1 and not is_strict_ea(self._mgr.blocks[0].values):
+            # Note: tests pass without this, but this improves perf quite a bit.
             # TODO: something like frame.values but that _may_ give an EA
             blk = self._mgr.blocks[0]
             new_values = blk.values
@@ -3009,7 +3010,7 @@ class DataFrame(NDFrame, OpsMixin):
             result = self._constructor(
                 dict(zip(self.index, new_values)), index=self.columns
             )
-            # TODO: what if index is non-unique?
+            # TODO: what if index is non-unique? (not specific to EA2D)
 
         else:
             new_values = self.values.T
