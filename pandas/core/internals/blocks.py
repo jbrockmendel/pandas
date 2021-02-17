@@ -207,10 +207,17 @@ class Block(PandasObject):
         if ndim is None:
             ndim = values.ndim
 
-        if self._validate_ndim and values.ndim != ndim:
+        if self._validate_ndim:
+            if values.ndim != ndim:
+                raise ValueError(
+                    "Wrong number of dimensions. "
+                    f"values.ndim != ndim [{values.ndim} != {ndim}]"
+                )
+        elif values.ndim > ndim:
+            # ExtensionBlock
             raise ValueError(
                 "Wrong number of dimensions. "
-                f"values.ndim != ndim [{values.ndim} != {ndim}]"
+                f"values.ndim > ndim [{values.ndim} > {ndim}]"
             )
         return ndim
 
