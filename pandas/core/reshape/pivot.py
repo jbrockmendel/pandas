@@ -180,7 +180,7 @@ def __internal_pivot_table(
                 and v in agged
                 and not is_integer_dtype(agged[v])
             ):
-                agged[v] = maybe_downcast_to_dtype(agged[v], data[v].dtype)
+                agged[v] = maybe_downcast_to_dtype(agged[v]._values, data[v].dtype)
 
     table = agged
 
@@ -320,7 +320,7 @@ def _add_margins(
     for dtype in set(result.dtypes):
         cols = result.select_dtypes([dtype]).columns
         margin_dummy[cols] = margin_dummy[cols].apply(
-            maybe_downcast_to_dtype, args=(dtype,)
+            lambda x: maybe_downcast_to_dtype(x._values, dtype=dtype)
         )
     result = result.append(margin_dummy)
     result.index.names = row_names

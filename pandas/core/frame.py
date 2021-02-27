@@ -6527,6 +6527,7 @@ Keep all original rows and columns and also all original values
                     otherSeries = otherSeries.astype(new_dtype)
 
             arr = func(series, otherSeries)
+            arr = extract_array(arr, extract_numpy=True)
             arr = maybe_downcast_to_dtype(arr, new_dtype)
 
             result[col] = arr

@@ -48,10 +48,10 @@ def test_downcast(arr, expected, dtype):
 def test_downcast_booleans():
     # see gh-16875: coercing of booleans.
     ser = Series([True, True, False])
-    result = maybe_downcast_to_dtype(ser, np.dtype(np.float64))
+    result = maybe_downcast_to_dtype(ser._values, np.dtype(np.float64))
 
-    expected = ser
-    tm.assert_series_equal(result, expected)
+    expected = ser._values
+    tm.assert_numpy_array_equal(result, expected)
 
 
 def test_downcast_conversion_no_nan(any_real_dtype):
@@ -91,13 +91,13 @@ def test_datetime_likes_nan(klass):
     tm.assert_numpy_array_equal(res, exp)
 
 
-@pytest.mark.parametrize("as_asi", [True, False])
-def test_datetime_with_timezone(as_asi):
+@pytest.mark.parametrize("as_asi8", [True, False])
+def test_datetime_with_timezone(as_asi8):
     # see gh-15426
     ts = Timestamp("2016-01-01 12:00:00", tz="US/Pacific")
     exp = DatetimeIndex([ts, ts])._data
 
-    obj = exp.asi8 if as_asi else exp
+    obj = exp.asi8 if as_asi8 else exp
     res = maybe_downcast_to_dtype(obj, exp.dtype)
 
     tm.assert_datetime_array_equal(res, exp)

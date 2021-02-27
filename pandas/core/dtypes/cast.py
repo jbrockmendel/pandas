@@ -240,6 +240,12 @@ def maybe_downcast_to_dtype(
     or could be an astype of float64->float32
     """
     do_round = False
+    # FIXME: we can get here with ExtensionDtype, doesn't match annotation
+
+    if not isinstance(result, np.ndarray):
+        if not isinstance(result, ABCExtensionArray):
+            raise TypeError  # pragma: no cover
+        return result
 
     if isinstance(dtype, str):
         if dtype == "infer":
@@ -293,22 +299,22 @@ def maybe_downcast_to_dtype(
 
 
 def maybe_downcast_numeric(
-    result: ArrayLike, dtype: DtypeObj, do_round: bool = False
-) -> ArrayLike:
+    result: AnyArrayLike, dtype: DtypeObj, do_round: bool = False
+) -> AnyArrayLike:
     """
     Subset of maybe_downcast_to_dtype restricted to numeric dtypes.
 
     Parameters
     ----------
-    result : ndarray or ExtensionArray
+    result : ndarray, ExtensionArray, or Series
     dtype : np.dtype or ExtensionDtype
     do_round : bool
 
     Returns
     -------
-    ndarray or ExtensionArray
+    ndarray, ExtensionArray, or Series
     """
-    if not isinstance(dtype, np.dtype):
+    if not isinstance(dtype, np.dtype) or not isinstance(result.dtype, np.dtype):
         # e.g. SparseDtype has no itemsize attr
         return result
 
