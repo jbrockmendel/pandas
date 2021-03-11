@@ -20,10 +20,7 @@ from pandas._libs import (
     NaT,
     lib,
 )
-from pandas._typing import (
-    ArrayLike,
-    Hashable,
-)
+from pandas._typing import ArrayLike
 from pandas.util._validators import validate_bool_kwarg
 
 from pandas.core.dtypes.cast import (
@@ -910,29 +907,17 @@ class ArrayManager(DataManager):
             self.arrays[mgr_idx] = value_arr
         return
 
-    def insert(self, loc: int, item: Hashable, value, allow_duplicates: bool = False):
+    def insert(self, loc: int, value: ArrayLike, new_items: Index):
         """
         Insert item at selected position.
 
         Parameters
         ----------
         loc : int
-        item : hashable
-        value : array_like
-        allow_duplicates: bool
-            If False, trying to insert non-unique item will raise
-
+        value : np.ndarray or ExtensionArray
+        new_items : Index
+            Updated columns after the insert.
         """
-        if not allow_duplicates and item in self.items:
-            # Should this be a different kind of error??
-            raise ValueError(f"cannot insert {item}, already exists")
-
-        if not isinstance(loc, int):
-            raise TypeError("loc must be int")
-
-        # insert to the axis; this could possibly raise a TypeError
-        new_axis = self.items.insert(loc, item)
-
         value = extract_array(value, extract_numpy=True)
         if value.ndim == 2:
             if value.shape[0] == 1:
@@ -950,7 +935,7 @@ class ArrayManager(DataManager):
         arrays.insert(loc, value)
 
         self.arrays = arrays
-        self._axes[1] = new_axis
+        self._axes[1] = new_items
 
     def reindex_indexer(
         self: T,
@@ -1087,7 +1072,7 @@ class ArrayManager(DataManager):
         else:
             return True
 
-    def unstack(self, unstacker, fill_value) -> ArrayManager:
+    def unstack(self, unstacker, fill_value, items: Index) -> ArrayManager:
         """
         Return a BlockManager with all blocks unstacked..
 
@@ -1096,10 +1081,12 @@ class ArrayManager(DataManager):
         unstacker : reshape._Unstacker
         fill_value : Any
             fill_value for newly introduced missing values.
+        items : Index
+            Columns for parent DataFrame.
 
         Returns
         -------
-        unstacked : BlockManager
+        unstacked : ArrayManager
         """
         indexer, _ = unstacker._indexer_and_to_sort
         new_indexer = np.full(unstacker.mask.shape, -1)

@@ -386,7 +386,9 @@ class TestBlockManager:
     def test_set(self):
         mgr = create_mgr("a,b,c: int", item_shape=(3,))
 
-        mgr.insert(len(mgr.items), "d", np.array(["foo"] * 3))
+        items = mgr.items
+        new_cols = items.insert(len(items), "d")
+        mgr.insert(len(mgr.items), np.array(["foo"] * 3), new_cols)
         mgr.iset(1, np.array(["bar"] * 3))
         tm.assert_numpy_array_equal(mgr.iget(0).internal_values(), np.array([0] * 3))
         tm.assert_numpy_array_equal(
@@ -398,7 +400,9 @@ class TestBlockManager:
         )
 
     def test_set_change_dtype(self, mgr):
-        mgr.insert(len(mgr.items), "baz", np.zeros(N, dtype=bool))
+        items = mgr.items
+        new_cols = items.insert(len(items), "baz")
+        mgr.insert(len(mgr.items), np.zeros(N, dtype=bool), new_cols)
 
         mgr.iset(mgr.items.get_loc("baz"), np.repeat("foo", N))
         idx = mgr.items.get_loc("baz")
@@ -409,7 +413,9 @@ class TestBlockManager:
         idx = mgr2.items.get_loc("baz")
         assert mgr2.iget(idx).dtype == np.object_
 
-        mgr2.insert(len(mgr2.items), "quux", np.random.randn(N).astype(int))
+        items2 = mgr2.items
+        new_cols2 = items2.insert(len(items2), "quux")
+        mgr2.insert(len(mgr2.items), np.random.randn(N).astype(int), new_cols2)
         idx = mgr2.items.get_loc("quux")
         assert mgr2.iget(idx).dtype == np.int_
 

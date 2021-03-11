@@ -449,7 +449,7 @@ def unstack(obj, level, fill_value=None):
 def _unstack_frame(obj, level, fill_value=None):
     if not obj._can_fast_transpose:
         unstacker = _Unstacker(obj.index, level=level)
-        mgr = obj._mgr.unstack(unstacker, fill_value=fill_value)
+        mgr = obj._mgr.unstack(unstacker, fill_value=fill_value, items=obj.columns)
         return obj._constructor(mgr)
     else:
         unstacker = _Unstacker(obj.index, level=level, constructor=obj._constructor)

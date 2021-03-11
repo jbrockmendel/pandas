@@ -7,7 +7,6 @@ from typing import (
     Callable,
     DefaultDict,
     Dict,
-    Hashable,
     List,
     Optional,
     Sequence,
@@ -1097,8 +1096,7 @@ class BlockManager(DataManager):
 
             blk.mgr_locs = bml.add(ref_loc_offset[bml.indexer])
 
-        # FIXME: use Index.delete as soon as it uses fastpath=True
-        self.axes[0] = self.items[~is_deleted]
+        self.axes[0] = self.items.delete(indexer)
         self.blocks = tuple(
             b for blkno, b in enumerate(self.blocks) if not is_blk_deleted[blkno]
         )
@@ -1230,31 +1228,17 @@ class BlockManager(DataManager):
             # Newly created block's dtype may already be present.
             self._known_consolidated = False
 
-    def insert(
-        self, loc: int, item: Hashable, value: ArrayLike, allow_duplicates: bool = False
-    ):
+    def insert(self, loc: int, value: ArrayLike, new_items: Index):
         """
         Insert item at selected position.
 
         Parameters
         ----------
         loc : int
-        item : hashable
         value : np.ndarray or ExtensionArray
-        allow_duplicates: bool
-            If False, trying to insert non-unique item will raise
-
+        new_items : Index
+            Updated columns after the insert.
         """
-        if not allow_duplicates and item in self.items:
-            # Should this be a different kind of error??
-            raise ValueError(f"cannot insert {item}, already exists")
-
-        if not isinstance(loc, int):
-            raise TypeError("loc must be int")
-
-        # insert to the axis; this could possibly raise a TypeError
-        new_axis = self.items.insert(loc, item)
-
         if value.ndim == 2:
             value = value.T
         else:
@@ -1280,7 +1264,7 @@ class BlockManager(DataManager):
             self._blklocs = np.insert(self._blklocs, loc, 0)
             self._blknos = np.insert(self._blknos, loc, len(self.blocks))
 
-        self.axes[0] = new_axis
+        self.axes[0] = new_items
         self.blocks += (block,)
 
         self._known_consolidated = False
@@ -1541,7 +1525,7 @@ class BlockManager(DataManager):
 
         return blockwise_all(self, other, array_equals)
 
-    def unstack(self, unstacker, fill_value) -> BlockManager:
+    def unstack(self, unstacker, fill_value, items: Index) -> BlockManager:
         """
         Return a BlockManager with all blocks unstacked..
 
@@ -1550,19 +1534,21 @@ class BlockManager(DataManager):
         unstacker : reshape._Unstacker
         fill_value : Any
             fill_value for newly introduced missing values.
+        items : Index
+            Columns for parent DataFrame.
 
         Returns
         -------
         unstacked : BlockManager
         """
-        new_columns = unstacker.get_new_columns(self.items)
+        new_columns = unstacker.get_new_columns(items)
         new_index = unstacker.new_index
 
         new_blocks: List[Block] = []
         columns_mask: List[np.ndarray] = []
 
         for blk in self.blocks:
-            blk_cols = self.items[blk.mgr_locs.indexer]
+            blk_cols = items[blk.mgr_locs.indexer]
             new_items = unstacker.get_new_columns(blk_cols)
             new_placement = new_columns.get_indexer(new_items)
 

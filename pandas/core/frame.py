@@ -3676,7 +3676,10 @@ class DataFrame(NDFrame, OpsMixin):
             loc = self._info_axis.get_loc(key)
         except KeyError:
             # This item wasn't present, just insert at end
-            self._mgr.insert(len(self._info_axis), key, value)
+            cols = self.columns
+            ncols = len(cols)
+            new_columns = cols.insert(ncols, key)
+            self._mgr.insert(ncols, value, new_columns)
         else:
             self._iset_item_mgr(loc, value)
 
@@ -4240,7 +4243,9 @@ class DataFrame(NDFrame, OpsMixin):
         # error: "ndarray" has no attribute "values"
         return self.iloc[:, keep_these.values]  # type: ignore[attr-defined]
 
-    def insert(self, loc, column, value, allow_duplicates: bool = False) -> None:
+    def insert(
+        self, loc: int, column: Hashable, value, allow_duplicates: bool = False
+    ) -> None:
         """
         Insert column into DataFrame at specified location.
 
@@ -4291,8 +4296,13 @@ class DataFrame(NDFrame, OpsMixin):
                 "Cannot specify 'allow_duplicates=True' when "
                 "'self.flags.allows_duplicate_labels' is False."
             )
+        elif not allow_duplicates and column in self.columns:
+            # TODO: Should this be a different kind of error?
+            raise ValueError(f"cannot insert {column}, already exists")
+
+        new_columns = self.columns.insert(loc, column)
         value = self._sanitize_column(value)
-        self._mgr.insert(loc, column, value, allow_duplicates=allow_duplicates)
+        self._mgr.insert(loc, value, new_columns)
 
     def assign(self, **kwargs) -> DataFrame:
         r"""
