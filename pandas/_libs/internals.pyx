@@ -505,3 +505,64 @@ cdef class Block:
 
             ndim = maybe_infer_ndim(self.values, self.mgr_locs)
             self.ndim = ndim
+
+
+@cython.freelist(64)
+cdef class BlockManager:
+    """
+    Defining __init__ in a cython class significantly improves performance.
+    """
+    cdef:
+        public tuple blocks
+        public list axes
+        public bint _is_consolidated, _known_consolidated
+
+    def __init__(self, blocks, axes):
+        self.blocks = blocks
+        self.axes = axes
+
+        self._known_consolidated = False
+
+    cpdef __reduce__(self):
+        if len(self.axes) == 1:
+            # SingleBlockManager, __init__ expects Block, axis
+            args = (self.blocks[0], self.axes[0])
+        else:
+            args = (self.blocks, self.axes)
+        return type(self), args
+
+    def __setstate__(self, state):
+        from pandas.core.construction import extract_array
+        from pandas.core.internals.blocks import new_block
+        from pandas.core.internals.managers import ensure_index
+
+        if isinstance(state, tuple) and len(state) >= 4 and "0.14.1" in state[3]:
+            state = state[3]["0.14.1"]
+            axes = [ensure_index(ax) for ax in state["axes"]]
+            ndim = len(axes)
+            # extract_array bc older pickles may store e.g. DatetimeIndex
+            #  instead of DatetimeArray
+            nbs = [
+                new_block(
+                    extract_array(blk["values"], extract_numpy=True),
+                    blk["mgr_locs"],
+                    ndim=ndim
+                )
+                for blk in state["blocks"]
+            ]
+            blocks = tuple(nbs)
+            if len(axes) == 1 and len(blocks) == 1:
+                # SingleBlockManager
+                self.__init__(blocks[0], axes[0])
+            else:
+                self.__init__(blocks, axes)
+
+        else:
+            raise NotImplementedError("pre-0.14.1 pickles are no longer supported")
+
+        self._post_setstate()
+
+    def _post_setstate(self) -> None:
+        self._is_consolidated = False
+        self._known_consolidated = False
+        self._rebuild_blknos_and_blklocs()
