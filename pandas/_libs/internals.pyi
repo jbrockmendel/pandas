@@ -56,3 +56,12 @@ class Block:
     values: ArrayLike
 
     def __init__(self, values: ArrayLike, placement: BlockPlacement, ndim: int): ...
+
+
+class BlockManager:
+    blocks: tuple
+    axes: list
+    _is_consolidated: bool
+    _known_consolidated: bool
+
+    def __init__(self, blocks, axes): ...
