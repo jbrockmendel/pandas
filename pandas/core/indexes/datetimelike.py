@@ -781,9 +781,7 @@ class DatetimeTimedeltaMixin(DatetimeIndexOpsMixin):
             right_chunk = right._values[:loc]  # type: ignore[misc]
             dates = concat_compat((left._values, right_chunk))
             # With sort being False, we can't infer that result.freq == self.freq
-            # TODO: no tests rely on the _with_freq("infer"); needed?
             result = type(self)._simple_new(dates, name=self.name)
-            result = result._with_freq("infer")
             return result
         else:
             left, right = other, self
@@ -816,15 +814,12 @@ class DatetimeTimedeltaMixin(DatetimeIndexOpsMixin):
                 # In the case where sort is None, _can_fast_union
                 #  implies that result.freq should match self.freq
                 assert result.freq == self.freq, (result.freq, self.freq)
-            elif result.freq is None:
-                # TODO: no tests rely on this; needed?
-                result = result._with_freq("infer")
             return result
         else:
             i8self = Int64Index._simple_new(self.asi8)
             i8other = Int64Index._simple_new(other.asi8)
             i8result = i8self._union(i8other, sort=sort)
-            result = type(self)(i8result, dtype=self.dtype, freq="infer")
+            result = type(self)(i8result, dtype=self.dtype)
             return result
 
     # --------------------------------------------------------------------

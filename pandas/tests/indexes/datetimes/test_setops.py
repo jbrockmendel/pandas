@@ -157,8 +157,8 @@ class TestDatetimeIndexSetOps:
         assert result.freq is None
 
     def test_union_freq_infer(self):
-        # When taking the union of two DatetimeIndexes, we infer
-        #  a freq even if the arguments don't have freq.  This matches
+        # When taking the union of two DatetimeIndex, we do _not_ infer
+        #  a freq in cases that do not use a fast-path.  This matches
         #  TimedeltaIndex behavior.
         dti = date_range("2016-01-01", periods=5)
         left = dti[[0, 1, 3, 4]]
@@ -169,7 +169,7 @@ class TestDatetimeIndexSetOps:
 
         result = left.union(right)
         tm.assert_index_equal(result, dti)
-        assert result.freq == "D"
+        assert result.freq is None
 
     def test_union_dataframe_index(self):
         rng1 = date_range("1/1/1999", "1/1/2012", freq="MS")
@@ -380,10 +380,12 @@ class TestDatetimeIndexSetOps:
         assert result.freqstr == "D"
         assert result.tz == rng.tz
 
+        # If one of the indexes has no freq, then we do not use a fastpath,
+        #  so do not infer freq.
         nofreq = DatetimeIndex(list(rng[25:75]), name="other")
         result = rng[:50].union(nofreq)
         assert result.name is None
-        assert result.freq == rng.freq
+        assert result.freq is None
         assert result.tz == rng.tz
 
         result = rng[:50].intersection(nofreq)
