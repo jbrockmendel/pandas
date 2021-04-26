@@ -1221,14 +1221,15 @@ class GroupBy(BaseGroupBy[FrameOrSeries]):
         func = com.is_builtin_func(func)
         f = lambda x: func(x, *args, **kwargs)
 
+        if self.grouper.ngroups == 0:
+            # agg_series below assumes ngroups > 0
+            return self._python_apply_general(f, self._selected_obj)
+
         # iterate through "columns" ex exclusions to populate output dict
         output: dict[base.OutputKey, np.ndarray] = {}
 
         for idx, obj in enumerate(self._iterate_slices()):
             name = obj.name
-            if self.grouper.ngroups == 0:
-                # agg_series below assumes ngroups > 0
-                continue
 
             try:
                 # if this function is invalid for this dtype, we will ignore it.
@@ -2715,7 +2716,7 @@ class GroupBy(BaseGroupBy[FrameOrSeries]):
             name = obj.name
             values = obj._values
 
-            if numeric_only and not is_numeric_dtype(values):
+            if numeric_only and not is_numeric_dtype(values.dtype):
                 continue
 
             if aggregate:
