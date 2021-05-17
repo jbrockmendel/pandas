@@ -43,6 +43,7 @@ from pandas.io.formats.style_render import (
     CSSProperties,
     CSSStyles,
     StylerRenderer,
+    Subset,
     Tooltips,
     maybe_convert_css_to_tuples,
     non_reducing_slice,
@@ -322,6 +323,10 @@ class Styler(StylerRenderer):
             raise NotImplementedError(
                 "Tooltips can only render with 'cell_ids' is True."
             )
+        if not ttips.index.is_unique or not ttips.columns.is_unique:
+            raise KeyError(
+                "Tooltips render only if `ttips` has unique index and columns."
+            )
         if self.tooltips is None:  # create a default instance if necessary
             self.tooltips = Tooltips()
         self.tooltips.tt_data = ttips
@@ -442,6 +447,10 @@ class Styler(StylerRenderer):
         '  </tbody>'
         '</table>'
         """
+        if not classes.index.is_unique or not classes.columns.is_unique:
+            raise KeyError(
+                "Classes render only if `classes` has unique index and columns."
+            )
         classes = classes.reindex_like(self.data)
 
         for r, row_tup in enumerate(classes.itertuples()):
@@ -464,6 +473,12 @@ class Styler(StylerRenderer):
             Whitespace shouldn't matter and the final trailing ';' shouldn't
             matter.
         """
+        if not self.index.is_unique or not self.columns.is_unique:
+            raise KeyError(
+                "`Styler.apply` and `.applymap` are not compatible "
+                "with non-unique index or columns."
+            )
+
         for cn in attrs.columns:
             for rn, c in attrs[[cn]].itertuples():
                 if not c:
@@ -531,7 +546,7 @@ class Styler(StylerRenderer):
         self,
         func: Callable[..., Styler],
         axis: Axis | None = 0,
-        subset=None,
+        subset: Subset | None = None,
         **kwargs,
     ) -> Styler:
         subset = slice(None) if subset is None else subset
@@ -576,7 +591,7 @@ class Styler(StylerRenderer):
         self,
         func: Callable[..., Styler],
         axis: Axis | None = 0,
-        subset=None,
+        subset: Subset | None = None,
         **kwargs,
     ) -> Styler:
         """
@@ -637,7 +652,9 @@ class Styler(StylerRenderer):
         )
         return self
 
-    def _applymap(self, func: Callable, subset=None, **kwargs) -> Styler:
+    def _applymap(
+        self, func: Callable, subset: Subset | None = None, **kwargs
+    ) -> Styler:
         func = partial(func, **kwargs)  # applymap doesn't take kwargs?
         if subset is None:
             subset = pd.IndexSlice[:]
@@ -646,7 +663,9 @@ class Styler(StylerRenderer):
         self._update_ctx(result)
         return self
 
-    def applymap(self, func: Callable, subset=None, **kwargs) -> Styler:
+    def applymap(
+        self, func: Callable, subset: Subset | None = None, **kwargs
+    ) -> Styler:
         """
         Apply a CSS-styling function elementwise.
 
@@ -693,7 +712,7 @@ class Styler(StylerRenderer):
         cond: Callable,
         value: str,
         other: str | None = None,
-        subset=None,
+        subset: Subset | None = None,
         **kwargs,
     ) -> Styler:
         """
@@ -986,10 +1005,11 @@ class Styler(StylerRenderer):
 
             table_styles = [
                 {
-                    "selector": str(s["selector"]) + idf + str(obj.get_loc(key)),
+                    "selector": str(s["selector"]) + idf + str(idx),
                     "props": maybe_convert_css_to_tuples(s["props"]),
                 }
                 for key, styles in table_styles.items()
+                for idx in obj.get_indexer_for([key])
                 for s in styles
             ]
         else:
@@ -1046,7 +1066,7 @@ class Styler(StylerRenderer):
         self.hidden_index = True
         return self
 
-    def hide_columns(self, subset) -> Styler:
+    def hide_columns(self, subset: Subset) -> Styler:
         """
         Hide columns from rendering.
 
@@ -1078,7 +1098,7 @@ class Styler(StylerRenderer):
         low: float = 0,
         high: float = 0,
         axis: Axis | None = 0,
-        subset=None,
+        subset: Subset | None = None,
         text_color_threshold: float = 0.408,
         vmin: float | None = None,
         vmax: float | None = None,
@@ -1224,7 +1244,7 @@ class Styler(StylerRenderer):
         )
         return self
 
-    def set_properties(self, subset=None, **kwargs) -> Styler:
+    def set_properties(self, subset: Subset | None = None, **kwargs) -> Styler:
         """
         Set defined CSS-properties to each ``<td>`` HTML element within the given
         subset.
@@ -1316,7 +1336,7 @@ class Styler(StylerRenderer):
 
     def bar(
         self,
-        subset=None,
+        subset: Subset | None = None,
         axis: Axis | None = 0,
         color="#d65f5f",
         width: float = 100,
@@ -1402,7 +1422,7 @@ class Styler(StylerRenderer):
     def highlight_null(
         self,
         null_color: str = "red",
-        subset: IndexLabel | None = None,
+        subset: Subset | None = None,
         props: str | None = None,
     ) -> Styler:
         """
@@ -1447,7 +1467,7 @@ class Styler(StylerRenderer):
 
     def highlight_max(
         self,
-        subset: IndexLabel | None = None,
+        subset: Subset | None = None,
         color: str = "yellow",
         axis: Axis | None = 0,
         props: str | None = None,
@@ -1496,7 +1516,7 @@ class Styler(StylerRenderer):
 
     def highlight_min(
         self,
-        subset: IndexLabel | None = None,
+        subset: Subset | None = None,
         color: str = "yellow",
         axis: Axis | None = 0,
         props: str | None = None,
@@ -1545,7 +1565,7 @@ class Styler(StylerRenderer):
 
     def highlight_between(
         self,
-        subset: IndexLabel | None = None,
+        subset: Subset | None = None,
         color: str = "yellow",
         axis: Axis | None = 0,
         left: Scalar | Sequence | None = None,
@@ -1652,7 +1672,7 @@ class Styler(StylerRenderer):
 
     def highlight_quantile(
         self,
-        subset: IndexLabel | None = None,
+        subset: Subset | None = None,
         color: str = "yellow",
         axis: Axis | None = 0,
         q_left: float = 0.0,
