@@ -77,6 +77,39 @@ class TestDataFrameValues:
         result = df.values.squeeze()
         assert (result[:, 0] == expected.values).all()
 
+    def test_private_values_dt64tz(self, using_array_manager, request):
+        if using_array_manager:
+            mark = pytest.mark.xfail(reason="doesn't share memory")
+            request.node.add_marker(mark)
+
+        dta = date_range("2000", periods=4, tz="US/Central")._data.reshape(-1, 1)
+
+        df = DataFrame(dta, columns=["A"])
+        tm.assert_equal(df._values, dta)
+
+        # we have a view
+        assert np.shares_memory(df._values._ndarray, dta._ndarray)
+
+        # TimedeltaArray
+        tda = dta - dta
+        df2 = df - df
+        tm.assert_equal(df2._values, tda)
+
+    @td.skip_array_manager_invalid_test
+    def test_private_values_dt64tz_multicol(self):
+        dta = date_range("2000", periods=8, tz="US/Central")._data.reshape(-1, 2)
+
+        df = DataFrame(dta, columns=["A", "B"])
+        tm.assert_equal(df._values, dta)
+
+        # we have a view
+        assert np.shares_memory(df._values._ndarray, dta._ndarray)
+
+        # TimedeltaArray
+        tda = dta - dta
+        df2 = df - df
+        tm.assert_equal(df2._values, tda)
+
     def test_frame_values_with_tz(self):
         tz = "US/Central"
         df = DataFrame({"A": date_range("2000", periods=4, tz=tz)})
