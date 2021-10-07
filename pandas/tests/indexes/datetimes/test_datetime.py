@@ -121,6 +121,13 @@ class TestDatetimeIndex:
             assert result._repr_base == expected._repr_base
             assert result == expected
 
+    def test_iter_readonly(self):
+        # GH#28055 ints_to_pydatetime with readonly array
+        arr = np.array([np.datetime64("2012-02-15T12:00:00.000000000")])
+        arr.setflags(write=False)
+        dti = pd.to_datetime(arr)
+        list(dti)
+
     @pytest.mark.parametrize("periods", [0, 9999, 10000, 10001])
     def test_iteration_over_chunksize(self, periods):
         # GH21012

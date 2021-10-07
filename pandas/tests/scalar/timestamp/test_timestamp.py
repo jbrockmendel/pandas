@@ -150,6 +150,50 @@ class TestTimestampProperties:
         for end in ends:
             assert getattr(ts, end)
 
+    # TODO: this was moved from tests.indexes.datetimes.test_misc, may be#
+    #  redundant with something else here?
+    def test_start_end_properties(self):
+        with tm.assert_produces_warning(
+            FutureWarning, match="The 'freq' argument", check_stacklevel=False
+        ):
+            tests = [
+                (Timestamp("2013-06-01", freq="M").is_month_start, 1),
+                (Timestamp("2013-06-01", freq="BM").is_month_start, 0),
+                (Timestamp("2013-06-03", freq="M").is_month_start, 0),
+                (Timestamp("2013-06-03", freq="BM").is_month_start, 1),
+                (Timestamp("2013-02-28", freq="Q-FEB").is_month_end, 1),
+                (Timestamp("2013-02-28", freq="Q-FEB").is_quarter_end, 1),
+                (Timestamp("2013-02-28", freq="Q-FEB").is_year_end, 1),
+                (Timestamp("2013-03-01", freq="Q-FEB").is_month_start, 1),
+                (Timestamp("2013-03-01", freq="Q-FEB").is_quarter_start, 1),
+                (Timestamp("2013-03-01", freq="Q-FEB").is_year_start, 1),
+                (Timestamp("2013-03-31", freq="QS-FEB").is_month_end, 1),
+                (Timestamp("2013-03-31", freq="QS-FEB").is_quarter_end, 0),
+                (Timestamp("2013-03-31", freq="QS-FEB").is_year_end, 0),
+                (Timestamp("2013-02-01", freq="QS-FEB").is_month_start, 1),
+                (Timestamp("2013-02-01", freq="QS-FEB").is_quarter_start, 1),
+                (Timestamp("2013-02-01", freq="QS-FEB").is_year_start, 1),
+                (Timestamp("2013-06-30", freq="BQ").is_month_end, 0),
+                (Timestamp("2013-06-30", freq="BQ").is_quarter_end, 0),
+                (Timestamp("2013-06-30", freq="BQ").is_year_end, 0),
+                (Timestamp("2013-06-28", freq="BQ").is_month_end, 1),
+                (Timestamp("2013-06-28", freq="BQ").is_quarter_end, 1),
+                (Timestamp("2013-06-28", freq="BQ").is_year_end, 0),
+                (Timestamp("2013-06-30", freq="BQS-APR").is_month_end, 0),
+                (Timestamp("2013-06-30", freq="BQS-APR").is_quarter_end, 0),
+                (Timestamp("2013-06-30", freq="BQS-APR").is_year_end, 0),
+                (Timestamp("2013-06-28", freq="BQS-APR").is_month_end, 1),
+                (Timestamp("2013-06-28", freq="BQS-APR").is_quarter_end, 1),
+                (Timestamp("2013-03-29", freq="BQS-APR").is_year_end, 1),
+                (Timestamp("2013-11-01", freq="AS-NOV").is_year_start, 1),
+                (Timestamp("2013-10-31", freq="AS-NOV").is_year_end, 1),
+                (Timestamp("2012-02-01").days_in_month, 29),
+                (Timestamp("2013-02-01").days_in_month, 28),
+            ]
+
+        for ts, value in tests:
+            assert ts == value
+
     # GH 12806
     @pytest.mark.parametrize(
         "data",

@@ -19,144 +19,8 @@ import pandas._testing as tm
 from pandas.core.arrays import DatetimeArray
 
 
-class TestTimeSeries:
-    def test_range_edges(self):
-        # GH#13672
-        idx = date_range(
-            start=Timestamp("1970-01-01 00:00:00.000000001"),
-            end=Timestamp("1970-01-01 00:00:00.000000004"),
-            freq="N",
-        )
-        exp = DatetimeIndex(
-            [
-                "1970-01-01 00:00:00.000000001",
-                "1970-01-01 00:00:00.000000002",
-                "1970-01-01 00:00:00.000000003",
-                "1970-01-01 00:00:00.000000004",
-            ],
-            freq="N",
-        )
-        tm.assert_index_equal(idx, exp)
-
-    def test_range_edges2(self):
-
-        idx = date_range(
-            start=Timestamp("1970-01-01 00:00:00.000000004"),
-            end=Timestamp("1970-01-01 00:00:00.000000001"),
-            freq="N",
-        )
-        exp = DatetimeIndex([], freq="N")
-        tm.assert_index_equal(idx, exp)
-
-    def test_range_edges3(self):
-
-        idx = date_range(
-            start=Timestamp("1970-01-01 00:00:00.000000001"),
-            end=Timestamp("1970-01-01 00:00:00.000000001"),
-            freq="N",
-        )
-        exp = DatetimeIndex(["1970-01-01 00:00:00.000000001"], freq="N")
-        tm.assert_index_equal(idx, exp)
-
-    def test_range_edges4(self):
-
-        idx = date_range(
-            start=Timestamp("1970-01-01 00:00:00.000001"),
-            end=Timestamp("1970-01-01 00:00:00.000004"),
-            freq="U",
-        )
-        exp = DatetimeIndex(
-            [
-                "1970-01-01 00:00:00.000001",
-                "1970-01-01 00:00:00.000002",
-                "1970-01-01 00:00:00.000003",
-                "1970-01-01 00:00:00.000004",
-            ],
-            freq="U",
-        )
-        tm.assert_index_equal(idx, exp)
-
-    def test_range_edges5(self):
-
-        idx = date_range(
-            start=Timestamp("1970-01-01 00:00:00.001"),
-            end=Timestamp("1970-01-01 00:00:00.004"),
-            freq="L",
-        )
-        exp = DatetimeIndex(
-            [
-                "1970-01-01 00:00:00.001",
-                "1970-01-01 00:00:00.002",
-                "1970-01-01 00:00:00.003",
-                "1970-01-01 00:00:00.004",
-            ],
-            freq="L",
-        )
-        tm.assert_index_equal(idx, exp)
-
-    def test_range_edges6(self):
-        idx = date_range(
-            start=Timestamp("1970-01-01 00:00:01"),
-            end=Timestamp("1970-01-01 00:00:04"),
-            freq="S",
-        )
-        exp = DatetimeIndex(
-            [
-                "1970-01-01 00:00:01",
-                "1970-01-01 00:00:02",
-                "1970-01-01 00:00:03",
-                "1970-01-01 00:00:04",
-            ],
-            freq="S",
-        )
-        tm.assert_index_equal(idx, exp)
-
-    def test_range_edges7(self):
-        idx = date_range(
-            start=Timestamp("1970-01-01 00:01"),
-            end=Timestamp("1970-01-01 00:04"),
-            freq="T",
-        )
-        exp = DatetimeIndex(
-            [
-                "1970-01-01 00:01",
-                "1970-01-01 00:02",
-                "1970-01-01 00:03",
-                "1970-01-01 00:04",
-            ],
-            freq="T",
-        )
-        tm.assert_index_equal(idx, exp)
-
-    def test_range_edges8(self):
-        idx = date_range(
-            start=Timestamp("1970-01-01 01:00"),
-            end=Timestamp("1970-01-01 04:00"),
-            freq="H",
-        )
-        exp = DatetimeIndex(
-            [
-                "1970-01-01 01:00",
-                "1970-01-01 02:00",
-                "1970-01-01 03:00",
-                "1970-01-01 04:00",
-            ],
-            freq="H",
-        )
-        tm.assert_index_equal(idx, exp)
-
-    def test_range_edges9(self):
-        idx = date_range(
-            start=Timestamp("1970-01-01"), end=Timestamp("1970-01-04"), freq="D"
-        )
-        exp = DatetimeIndex(
-            ["1970-01-01", "1970-01-02", "1970-01-03", "1970-01-04"], freq="D"
-        )
-        tm.assert_index_equal(idx, exp)
-
-
 class TestDatetime64:
-    def test_datetimeindex_accessors(self):
+    def test_datetimeindex_fields(self):
         dti_naive = date_range(freq="D", start=datetime(1998, 1, 1), periods=365)
         # GH#13303
         dti_tz = date_range(
@@ -247,7 +111,7 @@ class TestDatetime64:
             exp = DatetimeIndex([], freq="D", tz=dti.tz, name="name")
             tm.assert_index_equal(res, exp)
 
-    def test_datetimeindex_accessors2(self):
+    def test_datetimeindex_quarter_year_start_end(self):
         dti = date_range(freq="BQ-FEB", start=datetime(1998, 1, 1), periods=4)
 
         assert sum(dti.is_quarter_start) == 0
@@ -255,7 +119,7 @@ class TestDatetime64:
         assert sum(dti.is_year_start) == 0
         assert sum(dti.is_year_end) == 1
 
-    def test_datetimeindex_accessors3(self):
+    def test_datetimeindex_is_month_start_with_custom_business_day(self):
         # Ensure is_start/end accessors throw ValueError for CustomBusinessDay,
         bday_egypt = offsets.CustomBusinessDay(weekmask="Sun Mon Tue Wed Thu")
         dti = date_range(datetime(2013, 4, 30), periods=5, freq=bday_egypt)
@@ -263,54 +127,12 @@ class TestDatetime64:
         with pytest.raises(ValueError, match=msg):
             dti.is_month_start
 
-    def test_datetimeindex_accessors4(self):
+    def test_datetimeindex_is_month_start(self):
         dti = DatetimeIndex(["2000-01-01", "2000-01-02", "2000-01-03"])
 
         assert dti.is_month_start[0] == 1
 
-    def test_datetimeindex_accessors5(self):
-        with tm.assert_produces_warning(
-            FutureWarning, match="The 'freq' argument", check_stacklevel=False
-        ):
-            tests = [
-                (Timestamp("2013-06-01", freq="M").is_month_start, 1),
-                (Timestamp("2013-06-01", freq="BM").is_month_start, 0),
-                (Timestamp("2013-06-03", freq="M").is_month_start, 0),
-                (Timestamp("2013-06-03", freq="BM").is_month_start, 1),
-                (Timestamp("2013-02-28", freq="Q-FEB").is_month_end, 1),
-                (Timestamp("2013-02-28", freq="Q-FEB").is_quarter_end, 1),
-                (Timestamp("2013-02-28", freq="Q-FEB").is_year_end, 1),
-                (Timestamp("2013-03-01", freq="Q-FEB").is_month_start, 1),
-                (Timestamp("2013-03-01", freq="Q-FEB").is_quarter_start, 1),
-                (Timestamp("2013-03-01", freq="Q-FEB").is_year_start, 1),
-                (Timestamp("2013-03-31", freq="QS-FEB").is_month_end, 1),
-                (Timestamp("2013-03-31", freq="QS-FEB").is_quarter_end, 0),
-                (Timestamp("2013-03-31", freq="QS-FEB").is_year_end, 0),
-                (Timestamp("2013-02-01", freq="QS-FEB").is_month_start, 1),
-                (Timestamp("2013-02-01", freq="QS-FEB").is_quarter_start, 1),
-                (Timestamp("2013-02-01", freq="QS-FEB").is_year_start, 1),
-                (Timestamp("2013-06-30", freq="BQ").is_month_end, 0),
-                (Timestamp("2013-06-30", freq="BQ").is_quarter_end, 0),
-                (Timestamp("2013-06-30", freq="BQ").is_year_end, 0),
-                (Timestamp("2013-06-28", freq="BQ").is_month_end, 1),
-                (Timestamp("2013-06-28", freq="BQ").is_quarter_end, 1),
-                (Timestamp("2013-06-28", freq="BQ").is_year_end, 0),
-                (Timestamp("2013-06-30", freq="BQS-APR").is_month_end, 0),
-                (Timestamp("2013-06-30", freq="BQS-APR").is_quarter_end, 0),
-                (Timestamp("2013-06-30", freq="BQS-APR").is_year_end, 0),
-                (Timestamp("2013-06-28", freq="BQS-APR").is_month_end, 1),
-                (Timestamp("2013-06-28", freq="BQS-APR").is_quarter_end, 1),
-                (Timestamp("2013-03-29", freq="BQS-APR").is_year_end, 1),
-                (Timestamp("2013-11-01", freq="AS-NOV").is_year_start, 1),
-                (Timestamp("2013-10-31", freq="AS-NOV").is_year_end, 1),
-                (Timestamp("2012-02-01").days_in_month, 29),
-                (Timestamp("2013-02-01").days_in_month, 28),
-            ]
-
-        for ts, value in tests:
-            assert ts == value
-
-    def test_datetimeindex_accessors6(self):
+    def test_datetimeindex_weekofyear(self):
         # GH 6538: Check that DatetimeIndex and its TimeStamp elements
         # return the same weekofyear accessor close to new year w/ tz
         dates = ["2013/12/29", "2013/12/30", "2013/12/31"]
@@ -323,7 +145,7 @@ class TestDatetime64:
     @pytest.mark.parametrize(
         "time_locale", [None] if tm.get_locales() is None else [None] + tm.get_locales()
     )
-    def test_datetime_name_accessors(self, time_locale):
+    def test_day_name_month_name_locale(self, time_locale):
         # Test Monday -> Sunday and January -> December, in that sequence
         if time_locale is None:
             # If the time_locale is None, day-name and month_name should
@@ -404,15 +226,8 @@ class TestDatetime64:
     def test_nanosecond_field(self):
         dti = DatetimeIndex(np.arange(10))
 
-        tm.assert_index_equal(dti.nanosecond, Index(np.arange(10, dtype=np.int64)))
-
-
-def test_iter_readonly():
-    # GH#28055 ints_to_pydatetime with readonly array
-    arr = np.array([np.datetime64("2012-02-15T12:00:00.000000000")])
-    arr.setflags(write=False)
-    dti = pd.to_datetime(arr)
-    list(dti)
+        expected = Index(np.arange(10, dtype=np.int64))
+        tm.assert_index_equal(dti.nanosecond, expected)
 
 
 def test_week_and_weekofyear_are_deprecated():

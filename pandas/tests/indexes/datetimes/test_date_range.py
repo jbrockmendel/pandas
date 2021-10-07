@@ -803,6 +803,142 @@ class TestDateRangeTZ:
         assert stamp == rng[1]
 
 
+class TestDateRangeEdges:
+    def test_range_edges_nanosecond(self):
+        # GH#13672
+        idx = date_range(
+            start=Timestamp("1970-01-01 00:00:00.000000001"),
+            end=Timestamp("1970-01-01 00:00:00.000000004"),
+            freq="N",
+        )
+        exp = DatetimeIndex(
+            [
+                "1970-01-01 00:00:00.000000001",
+                "1970-01-01 00:00:00.000000002",
+                "1970-01-01 00:00:00.000000003",
+                "1970-01-01 00:00:00.000000004",
+            ],
+            freq="N",
+        )
+        tm.assert_index_equal(idx, exp)
+
+    def test_range_edges_nanosecond_end_before_start(self):
+
+        idx = date_range(
+            start=Timestamp("1970-01-01 00:00:00.000000004"),
+            end=Timestamp("1970-01-01 00:00:00.000000001"),
+            freq="N",
+        )
+        exp = DatetimeIndex([], freq="N")
+        tm.assert_index_equal(idx, exp)
+
+    def test_range_edges_nanosecond_end_matches_start(self):
+
+        idx = date_range(
+            start=Timestamp("1970-01-01 00:00:00.000000001"),
+            end=Timestamp("1970-01-01 00:00:00.000000001"),
+            freq="N",
+        )
+        exp = DatetimeIndex(["1970-01-01 00:00:00.000000001"], freq="N")
+        tm.assert_index_equal(idx, exp)
+
+    def test_range_edges_microsecond(self):
+
+        idx = date_range(
+            start=Timestamp("1970-01-01 00:00:00.000001"),
+            end=Timestamp("1970-01-01 00:00:00.000004"),
+            freq="U",
+        )
+        exp = DatetimeIndex(
+            [
+                "1970-01-01 00:00:00.000001",
+                "1970-01-01 00:00:00.000002",
+                "1970-01-01 00:00:00.000003",
+                "1970-01-01 00:00:00.000004",
+            ],
+            freq="U",
+        )
+        tm.assert_index_equal(idx, exp)
+
+    def test_range_edges_milisecond(self):
+
+        idx = date_range(
+            start=Timestamp("1970-01-01 00:00:00.001"),
+            end=Timestamp("1970-01-01 00:00:00.004"),
+            freq="L",
+        )
+        exp = DatetimeIndex(
+            [
+                "1970-01-01 00:00:00.001",
+                "1970-01-01 00:00:00.002",
+                "1970-01-01 00:00:00.003",
+                "1970-01-01 00:00:00.004",
+            ],
+            freq="L",
+        )
+        tm.assert_index_equal(idx, exp)
+
+    def test_range_edges_second(self):
+        idx = date_range(
+            start=Timestamp("1970-01-01 00:00:01"),
+            end=Timestamp("1970-01-01 00:00:04"),
+            freq="S",
+        )
+        exp = DatetimeIndex(
+            [
+                "1970-01-01 00:00:01",
+                "1970-01-01 00:00:02",
+                "1970-01-01 00:00:03",
+                "1970-01-01 00:00:04",
+            ],
+            freq="S",
+        )
+        tm.assert_index_equal(idx, exp)
+
+    def test_range_edges_minute(self):
+        idx = date_range(
+            start=Timestamp("1970-01-01 00:01"),
+            end=Timestamp("1970-01-01 00:04"),
+            freq="T",
+        )
+        exp = DatetimeIndex(
+            [
+                "1970-01-01 00:01",
+                "1970-01-01 00:02",
+                "1970-01-01 00:03",
+                "1970-01-01 00:04",
+            ],
+            freq="T",
+        )
+        tm.assert_index_equal(idx, exp)
+
+    def test_range_edges_hour(self):
+        idx = date_range(
+            start=Timestamp("1970-01-01 01:00"),
+            end=Timestamp("1970-01-01 04:00"),
+            freq="H",
+        )
+        exp = DatetimeIndex(
+            [
+                "1970-01-01 01:00",
+                "1970-01-01 02:00",
+                "1970-01-01 03:00",
+                "1970-01-01 04:00",
+            ],
+            freq="H",
+        )
+        tm.assert_index_equal(idx, exp)
+
+    def test_range_edges_day(self):
+        idx = date_range(
+            start=Timestamp("1970-01-01"), end=Timestamp("1970-01-04"), freq="D"
+        )
+        exp = DatetimeIndex(
+            ["1970-01-01", "1970-01-02", "1970-01-03", "1970-01-04"], freq="D"
+        )
+        tm.assert_index_equal(idx, exp)
+
+
 class TestGenRangeGeneration:
     def test_generate(self):
         rng1 = list(generate_range(START, END, offset=BDay()))
