@@ -19,6 +19,7 @@ from pandas.core.api import Int64Index
 
 from pandas.tseries.offsets import (
     BMonthEnd,
+    CDay,
     Minute,
     MonthEnd,
 )
@@ -297,6 +298,21 @@ class TestDatetimeIndexSetOps:
         if check_freq:
             # We don't preserve freq on non-anchored offsets
             assert result.freq == rng.freq
+
+    def test_intersection_non_tick_mismatched_time(self):
+        # GH#44025
+        off = CDay(1, False)
+
+        ts = pd.Timestamp("2021-10-13 09")
+        ts2 = ts + pd.Timedelta("1 hour")
+
+        dti = date_range(start=ts, periods=10, freq=off)
+        dti2 = date_range(start=ts2, periods=10, freq=off)
+
+        assert set(dti).intersection(set(dti2)) == set()
+
+        res = dti.intersection(dti2)
+        assert len(res) == 0
 
     def test_intersection_bug_1708(self):
         from pandas import DateOffset

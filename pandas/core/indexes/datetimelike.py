@@ -512,6 +512,12 @@ class DatetimeTimedeltaMixin(DatetimeIndexOpsMixin):
             # Because freq is not None, we must then be monotonic decreasing
             return False
 
+        if self[0].time() != other[0].time():
+            # GH#44025 we can only fast_intersect if there exists integer N
+            #  such that self[0] + self.freq.base * N == other[0]
+            #  and this usually won't hold when times do not match.
+            return False
+
         # this along with matching freqs ensure that we "line up",
         #  so intersection will preserve freq
         # Note we are assuming away Ticks, as those go through _range_intersect
