@@ -366,12 +366,7 @@ class TestXSWithMultiIndex:
         assert np.shares_memory(result.iloc[:, 0]._values, df.iloc[:, 0]._values)
         # modifying original df also modifies result when having a single block
         df.iloc[0, 0] = 2
-        if not using_array_manager:
-            expected = DataFrame({"a": [2]})
-        else:
-            # TODO(ArrayManager) iloc does not update the array inplace using
-            # "split" path
-            expected = DataFrame({"a": [1]})
+        expected = DataFrame({"a": [2]})
         tm.assert_frame_equal(result, expected)
 
         # with mixed dataframe, we still get a view on the parent
