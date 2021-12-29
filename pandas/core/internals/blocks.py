@@ -1176,7 +1176,7 @@ class Block(PandasObject):
             # we cannot coerce, return a compat dtype
             block = self.coerce_to_target_dtype(other)
             blocks = block.where(orig_other, cond)
-            return self._maybe_downcast(blocks, "infer")
+            return extend_blocks([nb._maybe_downcast([nb], "infer") for nb in blocks])
 
         else:
             alt = setitem_datetimelike_compat(values, icond.sum(), other)
@@ -1769,7 +1769,7 @@ class NDArrayBackedExtensionBlock(libinternals.NDArrayBackedBlock, EABackedBlock
                 raise
             blk = self.coerce_to_target_dtype(other)
             nbs = blk.where(other, cond)
-            return self._maybe_downcast(nbs, "infer")
+            return extend_blocks([nb._maybe_downcast([nb], "infer") for nb in nbs])
 
         nb = self.make_block_same_class(res_values)
         return [nb]

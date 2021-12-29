@@ -684,6 +684,11 @@ class SetitemCastingEquivalents:
         arr = obj._values
 
         res = obj.where(~mask, val)
+        if mask.all() and expected.dtype == object:
+            # TODO: now we're breaking the equivalence that was the whole
+            #  point of SetitemCastingEquivalents
+            # We do inference
+            expected = expected.infer_objects()
         tm.assert_series_equal(res, expected)
 
         self._check_inplace(is_inplace, orig, arr, obj)

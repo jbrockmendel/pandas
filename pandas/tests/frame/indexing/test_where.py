@@ -784,7 +784,7 @@ def test_where_bool_comparison():
     result = df_mask.where(df_mask == False)  # noqa:E712
     expected = DataFrame(
         {
-            "AAA": np.array([np.nan] * 4, dtype=object),
+            "AAA": np.array([np.nan] * 4),
             "BBB": [False] * 4,
             "CCC": [np.nan, False, np.nan, False],
         }
