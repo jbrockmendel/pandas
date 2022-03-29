@@ -858,12 +858,15 @@ def value_counts(
 
 
 # Called once from SparseArray, otherwise could be private
-def value_counts_arraylike(values: np.ndarray, dropna: bool):
+def value_counts_arraylike(values: np.ndarray, dropna: bool, mask: npt.NDArray[np.bool_] | None = None):
     """
     Parameters
     ----------
     values : np.ndarray
     dropna : bool
+    mask : np.ndarray[bool] or None, default None
+        If provided, isna this is used instead of isna checks internally.
+        NB: this may be dangerous with dropna=False
 
     Returns
     -------
@@ -873,7 +876,7 @@ def value_counts_arraylike(values: np.ndarray, dropna: bool):
     original = values
     values = _ensure_data(values)
 
-    keys, counts = htable.value_count(values, dropna)
+    keys, counts = htable.value_count(values, dropna, mask=mask)
 
     if needs_i8_conversion(original.dtype):
         # datetime, timedelta, or period

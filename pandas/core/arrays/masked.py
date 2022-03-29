@@ -65,6 +65,7 @@ from pandas.core import (
 from pandas.core.algorithms import (
     factorize_array,
     isin,
+    value_counts_arraylike,
     take,
 )
 from pandas.core.array_algos import masked_reductions
@@ -905,6 +906,17 @@ class BaseMaskedArray(OpsMixin, ExtensionArray):
             Index,
             Series,
         )
+
+        keys, counts = value_counts_arraylike(self._data, dropna=dropna, mask=self._mask)
+        res = Series(counts, index=keys).astype("Int64")
+        res.index = res.index.astype(self.dtype)
+        if not dropna and self._hasna:
+            res[libmissing.NA] = self._data.sum()
+
+        #if not dropna and self._hasna:
+        #    breakpoint()
+        return res
+
         from pandas.arrays import IntegerArray
 
         # compute counts on the data with no nans
