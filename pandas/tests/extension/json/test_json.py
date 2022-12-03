@@ -4,6 +4,11 @@ import sys
 
 import pytest
 
+from pandas.core.dtypes.base import (
+    _registry,
+    register_extension_dtype,
+)
+
 import pandas as pd
 import pandas._testing as tm
 from pandas.tests.extension import base
@@ -12,6 +17,16 @@ from pandas.tests.extension.json.array import (
     JSONDtype,
     make_data,
 )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def register_dtype():
+    """
+    Register the JSONDtype, un-registering it after the tests have run.
+    """
+    register_extension_dtype(JSONDtype)
+    yield
+    _registry.dtypes.remove(JSONDtype)
 
 
 @pytest.fixture
@@ -150,9 +165,9 @@ class TestInterface(BaseJSON, base.BaseInterfaceTests):
     @pytest.mark.xfail(
         reason="comparison method not implemented for JSONArray (GH-37867)"
     )
-    def test_contains(self, data):
+    def test_contains(self, data, data_missing):
         # GH-37867
-        super().test_contains(data)
+        super().test_contains(data, data_missing=data_missing)
 
 
 class TestConstructors(BaseJSON, base.BaseConstructorsTests):
