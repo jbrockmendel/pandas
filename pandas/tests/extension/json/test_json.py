@@ -273,42 +273,17 @@ class TestMethods(BaseJSON, base.BaseMethodsTests):
     def test_combine_add(self, data_repeated):
         super().test_combine_add(data_repeated)
 
-    @pytest.mark.xfail(
-        reason="combine for JSONArray not supported - "
-        "may pass depending on random data",
-        strict=False,
-    )
-    def test_combine_first(self, data):
-        super().test_combine_first(data)
-
     @unhashable
     def test_hash_pandas_object_works(self, data, kind):
         super().test_hash_pandas_object_works(data, kind)
-
-    @pytest.mark.xfail(reason="broadcasting error")
-    def test_where_series(self, data, na_value):
-        # Fails with
-        # *** ValueError: operands could not be broadcast together
-        # with shapes (4,) (4,) (0,)
-        super().test_where_series(data, na_value)
 
     @pytest.mark.xfail(reason="Can't compare dicts.")
     def test_searchsorted(self, data_for_sorting):
         super().test_searchsorted(data_for_sorting)
 
-    @pytest.mark.xfail(reason="Can't compare dicts.")
-    def test_equals(self, data, na_value, as_series):
-        super().test_equals(data, na_value, as_series)
-
 
 class TestCasting(BaseJSON, base.BaseCastingTests):
-    @pytest.mark.xfail(reason="failing on np.array(self, dtype=str)")
-    def test_astype_str(self):
-        """This currently fails in NumPy on np.array(self, dtype=str) with
-
-        *** ValueError: setting an array element with a sequence
-        """
-        super().test_astype_str()
+    pass
 
 
 # We intentionally don't run base.BaseSetitemTests because pandas'

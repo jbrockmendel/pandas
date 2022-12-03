@@ -29,14 +29,19 @@ from typing import (
 
 import numpy as np
 
-from pandas._typing import type_t
+from pandas._typing import (
+    npt,
+    type_t,
+)
 
 from pandas.core.dtypes.cast import construct_1d_object_array_from_listlike
 from pandas.core.dtypes.common import (
     is_bool_dtype,
+    is_dtype_equal,
     is_list_like,
     pandas_dtype,
 )
+from pandas.core.dtypes.missing import array_equivalent
 
 import pandas as pd
 from pandas.api.extensions import (
@@ -118,16 +123,18 @@ class JSONArray(ExtensionArray):
         if isinstance(key, numbers.Integral):
             self.data[key] = value
         else:
-            if not isinstance(value, (type(self), abc.Sequence)):
+            if not isinstance(value, (type(self), abc.Sequence, np.ndarray)):
                 # broadcast value
                 value = itertools.cycle([value])
 
             if isinstance(key, np.ndarray) and key.dtype == "bool":
                 # masking
+                key = key.nonzero()[0]
+                # TODO: validate length match?
                 for i, (k, v) in enumerate(zip(key, value)):
                     if k:
                         assert isinstance(v, self.dtype.type)
-                        self.data[i] = v
+                        self.data[k] = v
             else:
                 for k, v in zip(key, value):
                     assert isinstance(v, self.dtype.type)
@@ -156,6 +163,39 @@ class JSONArray(ExtensionArray):
 
     def isna(self):
         return np.array([x == self.dtype.na_value for x in self.data], dtype=bool)
+
+    def equals(self, other):
+        if type(self) != type(other):
+            return False
+        if not is_dtype_equal(self.dtype, other.dtype):
+            return False
+        elif len(self) != len(other):
+            return False
+        return array_equivalent(
+            construct_1d_object_array_from_listlike(self.data),
+            construct_1d_object_array_from_listlike(other.data),
+        )
+
+    def _putmask(self, mask: npt.NDArray[np.bool_], value) -> None:
+        if is_list_like(value) and not isinstance(value, self.dtype.type):
+            # Difference from base class is we need to exclude JSON "scalars"
+            val = value[mask]
+        else:
+            val = value
+
+        self[mask] = val
+
+    def _where(self, mask: npt.NDArray[np.bool_], value) -> JSONArray:
+        result = self.copy()
+
+        if is_list_like(value) and not isinstance(value, self.dtype.type):
+            # Difference from base class is we need to exclude JSON "scalars"
+            val = value[~mask]
+        else:
+            val = value
+
+        result[~mask] = val
+        return result
 
     def take(self, indexer, allow_fill=False, fill_value=None):
         # re-implement here, since NumPy has trouble setting
