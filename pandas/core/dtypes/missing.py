@@ -519,6 +519,13 @@ def array_equivalent(
         #  or `in ("O", "S", "U")`
         return _array_equivalent_object(left, right, strict_nan)
 
+    elif needs_i8_conversion(left.dtype) and not needs_i8_conversion(right.dtype):
+        # TODO: similar to is_comparable_dtype?
+        return False
+    elif needs_i8_conversion(right.dtype) and not needs_i8_conversion(left.dtype):
+        # TODO: similar to is_comparable_dtype?
+        return False
+
     # NaNs can occur in float and complex arrays.
     if is_float_dtype(left.dtype) or is_complex_dtype(left.dtype):
         if not (left.size and right.size):

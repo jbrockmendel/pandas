@@ -39,18 +39,6 @@ import pandas._testing as tm
 )
 @pytest.mark.parametrize("q", [0, 0.25, 0.5, 0.75, 1])
 def test_quantile(interpolation, a_vals, b_vals, q, request):
-    if (
-        interpolation == "nearest"
-        and q == 0.5
-        and isinstance(b_vals, list)
-        and b_vals == [4, 3, 2, 1]
-    ):
-        request.node.add_marker(
-            pytest.mark.xfail(
-                reason="Unclear numpy expectation for nearest "
-                "result with equidistant data"
-            )
-        )
     all_vals = pd.concat([pd.Series(a_vals), pd.Series(b_vals)])
 
     a_expected = pd.Series(a_vals).quantile(q, interpolation=interpolation)
@@ -179,10 +167,11 @@ def test_quantile_out_of_bounds_q_raises():
     # https://github.com/pandas-dev/pandas/issues/27470
     df = DataFrame({"a": [0, 0, 0, 1, 1, 1], "b": range(6)})
     g = df.groupby([0, 0, 0, 1, 1, 1])
-    with pytest.raises(ValueError, match="Got '50.0' instead"):
+    msg = r"percentiles should all be in the interval \[0, 1\]."
+    with pytest.raises(ValueError, match=msg):
         g.quantile(50)
 
-    with pytest.raises(ValueError, match="Got '-1.0' instead"):
+    with pytest.raises(ValueError, match=msg):
         g.quantile(-1)
 
 
@@ -271,10 +260,7 @@ def test_groupby_quantile_NA_float(any_float_dtype):
     result = df.groupby("x")["y"].quantile(0.5)
     exp_index = Index([1.0], dtype=any_float_dtype, name="x")
 
-    if any_float_dtype in ["Float32", "Float64"]:
-        expected_dtype = any_float_dtype
-    else:
-        expected_dtype = None
+    expected_dtype = any_float_dtype
 
     expected = pd.Series([0.2], dtype=expected_dtype, index=exp_index, name="y")
     tm.assert_series_equal(result, expected)

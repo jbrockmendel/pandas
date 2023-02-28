@@ -1075,6 +1075,10 @@ class BaseMaskedArray(OpsMixin, ExtensionArray):
                 out_mask = np.zeros(res.shape, dtype=bool)
         else:
             out_mask = np.zeros(res.shape, dtype=bool)
+
+        if self._data.dtype == np.float32:
+            # Retain this dtype
+            res = res.astype(np.float32)
         return self._maybe_mask_result(res, mask=out_mask)
 
     # ------------------------------------------------------------------

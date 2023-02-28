@@ -396,7 +396,10 @@ def test_groupby_raises_category(
             r"unsupported operand type\(s\) for /: 'Categorical' and 'Categorical'",
         ),
         "prod": (TypeError, "category type does not support prod operations"),
-        "quantile": (TypeError, "No matching signature found"),
+        "quantile": (
+            TypeError,
+            "'quantile' cannot be performed against 'object' dtypes!",
+        ),
         "rank": (None, ""),
         "sem": (ValueError, "Cannot cast object dtype to float64"),
         "shift": (None, ""),

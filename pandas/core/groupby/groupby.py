@@ -47,7 +47,6 @@ from pandas._typing import (
     ArrayLike,
     Axis,
     AxisInt,
-    DtypeObj,
     FillnaOptions,
     IndexLabel,
     NDFrameT,
@@ -71,15 +70,12 @@ from pandas.util._decorators import (
 
 from pandas.core.dtypes.cast import ensure_dtype_can_hold_na
 from pandas.core.dtypes.common import (
-    is_bool_dtype,
-    is_float_dtype,
+    is_categorical_dtype,
     is_hashable,
     is_integer,
-    is_integer_dtype,
     is_numeric_dtype,
     is_object_dtype,
     is_scalar,
-    needs_i8_conversion,
 )
 from pandas.core.dtypes.missing import (
     isna,
@@ -96,7 +92,6 @@ from pandas.core.arrays import (
     BooleanArray,
     Categorical,
     DatetimeArray,
-    ExtensionArray,
     FloatingArray,
     TimedeltaArray,
 )
@@ -3124,177 +3119,79 @@ class GroupBy(BaseGroupBy[NDFrameT]):
         a    2.0
         b    3.0
         """
-
-        def pre_processor(vals: ArrayLike) -> tuple[np.ndarray, DtypeObj | None]:
-            if is_object_dtype(vals):
-                raise TypeError(
-                    "'quantile' cannot be performed against 'object' dtypes!"
-                )
-
-            inference: DtypeObj | None = None
-            if isinstance(vals, BaseMaskedArray) and is_numeric_dtype(vals.dtype):
-                out = vals.to_numpy(dtype=float, na_value=np.nan)
-                inference = vals.dtype
-            elif is_integer_dtype(vals.dtype):
-                if isinstance(vals, ExtensionArray):
-                    out = vals.to_numpy(dtype=float, na_value=np.nan)
-                else:
-                    out = vals
-                inference = np.dtype(np.int64)
-            elif is_bool_dtype(vals.dtype) and isinstance(vals, ExtensionArray):
-                out = vals.to_numpy(dtype=float, na_value=np.nan)
-            elif needs_i8_conversion(vals.dtype):
-                inference = vals.dtype
-                # In this case we need to delay the casting until after the
-                #  np.lexsort below.
-                # error: Incompatible return value type (got
-                # "Tuple[Union[ExtensionArray, ndarray[Any, Any]], Union[Any,
-                # ExtensionDtype]]", expected "Tuple[ndarray[Any, Any],
-                # Optional[Union[dtype[Any], ExtensionDtype]]]")
-                return vals, inference  # type: ignore[return-value]
-            elif isinstance(vals, ExtensionArray) and is_float_dtype(vals):
-                inference = np.dtype(np.float64)
-                out = vals.to_numpy(dtype=float, na_value=np.nan)
-            else:
-                out = np.asarray(vals)
-
-            return out, inference
-
-        def post_processor(
-            vals: np.ndarray,
-            inference: DtypeObj | None,
-            result_mask: np.ndarray | None,
-            orig_vals: ArrayLike,
-        ) -> ArrayLike:
-            if inference:
-                # Check for edge case
-                if isinstance(orig_vals, BaseMaskedArray):
-                    assert result_mask is not None  # for mypy
-
-                    if interpolation in {"linear", "midpoint"} and not is_float_dtype(
-                        orig_vals
-                    ):
-                        return FloatingArray(vals, result_mask)
-                    else:
-                        # Item "ExtensionDtype" of "Union[ExtensionDtype, str,
-                        # dtype[Any], Type[object]]" has no attribute "numpy_dtype"
-                        # [union-attr]
-                        with warnings.catch_warnings():
-                            # vals.astype with nan can warn with numpy >1.24
-                            warnings.filterwarnings("ignore", category=RuntimeWarning)
-                            return type(orig_vals)(
-                                vals.astype(
-                                    inference.numpy_dtype  # type: ignore[union-attr]
-                                ),
-                                result_mask,
-                            )
-
-                elif not (
-                    is_integer_dtype(inference)
-                    and interpolation in {"linear", "midpoint"}
-                ):
-                    if needs_i8_conversion(inference):
-                        # error: Item "ExtensionArray" of "Union[ExtensionArray,
-                        # ndarray[Any, Any]]" has no attribute "_ndarray"
-                        vals = vals.astype("i8").view(
-                            orig_vals._ndarray.dtype  # type: ignore[union-attr]
-                        )
-                        # error: Item "ExtensionArray" of "Union[ExtensionArray,
-                        # ndarray[Any, Any]]" has no attribute "_from_backing_data"
-                        return orig_vals._from_backing_data(  # type: ignore[union-attr]
-                            vals
-                        )
-
-                    assert isinstance(inference, np.dtype)  # for mypy
-                    return vals.astype(inference)
-
-            return vals
-
+        qs = np.asarray(q)
         orig_scalar = is_scalar(q)
         if orig_scalar:
-            # error: Incompatible types in assignment (expression has type "List[
-            # Union[float, ExtensionArray, ndarray[Any, Any], Index, Series]]",
-            # variable has type "Union[float, Union[Union[ExtensionArray, ndarray[
-            # Any, Any]], Index, Series]]")
-            q = [q]  # type: ignore[assignment]
+            qs = np.asarray([q])
+        # Avoid expensive MultiIndex construction if orig_scalar
+        pass_qs = None if orig_scalar else np.asarray(qs, dtype=np.float64)
 
-        qs = np.array(q, dtype=np.float64)
-        ids, _, ngroups = self.grouper.group_info
-        nqs = len(qs)
+        mgr = self._get_data_to_aggregate(numeric_only=numeric_only, name="quantile")
+        obj = self._wrap_agged_manager(mgr)
 
-        func = partial(
-            libgroupby.group_quantile, labels=ids, qs=qs, interpolation=interpolation
-        )
+        # Check if we have dtypes for which the groupby.quantile behavior
+        #  is different from the NDFrame.quantile behavior, in which case
+        #  we go through the specialized path, xref GH#51424
+        if obj.ndim == 1:
+            is_obj = is_object_dtype(obj.dtype)
+            is_cat = is_categorical_dtype(obj.dtype) and is_object_dtype(
+                obj.dtype.categories.dtype
+            )
+            cypath = obj.dtype.kind == "b"
+        else:
+            is_obj = any(is_object_dtype(dtype) for dtype in obj.dtypes.values)
+            is_cat = any(
+                is_categorical_dtype(dtype) and is_object_dtype(dtype.categories.dtype)
+                for dtype in obj.dtypes.values
+            )
+            cypath = any(dtype.kind == "b" for dtype in obj.dtypes.values)
 
-        # Put '-1' (NaN) labels as the last group so it does not interfere
-        # with the calculations. Note: length check avoids failure on empty
-        # labels. In that case, the value doesn't matter
-        na_label_for_sorting = ids.max() + 1 if len(ids) > 0 else 0
-        labels_for_lexsort = np.where(ids == -1, na_label_for_sorting, ids)
-
-        def blk_func(values: ArrayLike) -> ArrayLike:
-            orig_vals = values
-            if isinstance(values, BaseMaskedArray):
-                mask = values._mask
-                result_mask = np.zeros((ngroups, nqs), dtype=np.bool_)
+        if is_obj or is_cat:
+            raise TypeError("'quantile' cannot be performed against 'object' dtypes!")
+        elif cypath:
+            # GH#51424 we support bool dtypes in GroupBy.quantile but not in
+            #  Series/DataFrame.quantile, so until that is aligned we need
+            #  to cast here.
+            if obj.ndim == 1:
+                if isinstance(obj.dtype, np.dtype):
+                    obj = obj.astype(np.float64)
+                else:
+                    obj = obj.astype("Float64")
             else:
-                mask = isna(values)
-                result_mask = None
+                dtypes = obj.dtypes.values
+                obj = obj.copy(deep=False)
+                for i in range(obj.shape[1]):
+                    dtype = dtypes[i]
+                    if dtype.kind == "b":
+                        col = obj.iloc[:, i]
+                        if isinstance(obj.dtype, np.dtype):
+                            new_col = col.astype(np.float64)
+                        else:
+                            new_col = col.astype("Float64")
+                        obj.isetitem(i, new_col)
 
-            is_datetimelike = needs_i8_conversion(values.dtype)
+        if self.axis == 1:
+            # _python_apply_general would guess wrong about how to
+            #  concat the results.
+            def quantile_func(df):
+                return df.quantile(q=qs, axis=1, interpolation=interpolation)
 
-            vals, inference = pre_processor(values)
+            values = []
+            for _, grp in self.grouper.get_iterator(obj.T, axis=1):
+                grp_res = quantile_func(grp)
+                values.append(grp_res)
 
-            ncols = 1
-            if vals.ndim == 2:
-                ncols = vals.shape[0]
-                shaped_labels = np.broadcast_to(
-                    labels_for_lexsort, (ncols, len(labels_for_lexsort))
-                )
-            else:
-                shaped_labels = labels_for_lexsort
+            from pandas import concat
 
-            out = np.empty((ncols, ngroups, nqs), dtype=np.float64)
+            result = concat(values, axis=0)
+        else:
 
-            # Get an index of values sorted by values and then labels
-            order = (vals, shaped_labels)
-            sort_arr = np.lexsort(order).astype(np.intp, copy=False)
+            def quantile_func(df):
+                return df.quantile(q=qs, interpolation=interpolation)
 
-            if is_datetimelike:
-                # This casting needs to happen after the lexsort in order
-                #  to ensure that NaTs are placed at the end and not the front
-                vals = vals.view("i8").astype(np.float64)
+            result = self._python_apply_general(quantile_func, obj)
 
-            if vals.ndim == 1:
-                # Ea is always 1d
-                func(
-                    out[0],
-                    values=vals,
-                    mask=mask,
-                    sort_indexer=sort_arr,
-                    result_mask=result_mask,
-                )
-            else:
-                for i in range(ncols):
-                    func(out[i], values=vals[i], mask=mask[i], sort_indexer=sort_arr[i])
-
-            if vals.ndim == 1:
-                out = out.ravel("K")
-                if result_mask is not None:
-                    result_mask = result_mask.ravel("K")
-            else:
-                out = out.reshape(ncols, ngroups * nqs)
-            return post_processor(out, inference, result_mask, orig_vals)
-
-        data = self._get_data_to_aggregate(numeric_only=numeric_only, name="quantile")
-        res_mgr = data.grouped_reduce(blk_func)
-
-        res = self._wrap_agged_manager(res_mgr)
-
-        if orig_scalar:
-            # Avoid expensive MultiIndex construction
-            return self._wrap_aggregated_output(res)
-        return self._wrap_aggregated_output(res, qs=qs)
+        return self._wrap_aggregated_output(result, qs=pass_qs)
 
     @final
     @Substitution(name="groupby")
