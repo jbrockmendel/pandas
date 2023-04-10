@@ -653,7 +653,7 @@ class DataFrame(NDFrame, OpsMixin):
         copy: bool | None = None,
     ) -> None:
         if dtype is not None:
-            dtype = self._validate_dtype(dtype)
+            dtype = pandas_dtype(dtype)
 
         if isinstance(data, DataFrame):
             data = data._mgr
@@ -700,6 +700,8 @@ class DataFrame(NDFrame, OpsMixin):
                 copy = False
 
         if data is None:
+            if dtype is None:
+                dtype = np.dtype("V")
             index = index if index is not None else default_index(0)
             columns = columns if columns is not None else default_index(0)
             dtype = dtype if dtype is not None else pandas_dtype(object)

@@ -291,6 +291,8 @@ def _isna_array(values: ArrayLike, inf_as_na: bool = False):
     elif dtype.kind in "mM":
         # this is the NaT pattern
         result = values.view("i8") == iNaT
+    elif dtype.kind == "V":
+        return np.ones(values.shape, dtype=bool)
     else:
         if inf_as_na:
             result = ~np.isfinite(values)

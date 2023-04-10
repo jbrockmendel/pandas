@@ -1495,7 +1495,7 @@ def construct_1d_arraylike_from_scalar(
             value = _maybe_box_and_unbox_datetimelike(value, dtype)
 
         subarr = np.empty(length, dtype=dtype)
-        if length:
+        if length and dtype.kind != "V":
             # GH 47391: numpy > 1.24 will raise filling np.nan into int dtypes
             subarr.fill(value)
 

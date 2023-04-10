@@ -53,7 +53,6 @@ from pandas._typing import (
     Dtype,
     DtypeArg,
     DtypeBackend,
-    DtypeObj,
     FilePath,
     FillnaOptions,
     FloatFormatType,
@@ -121,7 +120,6 @@ from pandas.core.dtypes.common import (
     is_re_compilable,
     is_scalar,
     is_timedelta64_dtype,
-    pandas_dtype,
 )
 from pandas.core.dtypes.dtypes import (
     DatetimeTZDtype,
@@ -452,22 +450,6 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         if allows_duplicate_labels is not None:
             df.flags["allows_duplicate_labels"] = allows_duplicate_labels
         return df
-
-    @final
-    @classmethod
-    def _validate_dtype(cls, dtype) -> DtypeObj | None:
-        """validate the passed dtype"""
-        if dtype is not None:
-            dtype = pandas_dtype(dtype)
-
-            # a compound dtype
-            if dtype.kind == "V":
-                raise NotImplementedError(
-                    "compound dtypes are not implemented "
-                    f"in the {cls.__name__} constructor"
-                )
-
-        return dtype
 
     # ----------------------------------------------------------------------
     # Construction
@@ -5171,7 +5153,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         method: str | None = None,
         copy: bool_t | None = None,
         level: Level | None = None,
-        fill_value: Scalar | None = np.nan,
+        fill_value: Scalar | None = lib.no_default,
         limit: int | None = None,
         tolerance=None,
     ) -> Self:
@@ -5498,6 +5480,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
                 fill_value=fill_value,
                 allow_dups=allow_dups,
                 copy=copy,
+                use_na_proxy=fill_value is lib.no_default,
             )
             # If we've made a copy once, no need to make another one
             copy = False
