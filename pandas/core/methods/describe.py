@@ -38,7 +38,6 @@ from pandas.core.dtypes.dtypes import (
 
 from pandas.core.arrays.arrow.dtype import ArrowDtype
 from pandas.core.arrays.floating import Float64Dtype
-from pandas.core.reshape.concat import concat
 
 from pandas.io.formats.format import format_percentiles
 
@@ -167,11 +166,8 @@ class DataFrameDescriber(NDFrameDescriberAbstract):
             ldesc.append(describe_func(series, percentiles))
 
         col_names = reorder_columns(ldesc)
-        d = concat(
-            [x.reindex(col_names, copy=False) for x in ldesc],
-            axis=1,
-            sort=False,
-        )
+        aligned = [x.reindex(col_names, copy=False) for x in ldesc]
+        d = aligned[0]._concat_horizontal(aligned)
         d.columns = data.columns.copy()
         return d
 

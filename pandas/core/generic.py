@@ -6438,11 +6438,9 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
             return self.copy(deep=None)
 
         # GH 19920: retain column metadata after concat
-        result = concat(results, axis=1, copy=False)
+        result = results[0]._concat_horizontal(results)
         # GH#40810 retain subclass
-        # error: Incompatible types in assignment
-        # (expression has type "Self", variable has type "DataFrame")
-        result = self._constructor(result)  # type: ignore[assignment]
+        result = self._constructor(result)
         result.columns = self.columns
         result = result.__finalize__(self, method="astype")
         # https://github.com/python/mypy/issues/8354
@@ -6790,9 +6788,10 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
                 for col_name, col in self.items()
             ]
             if len(results) > 0:
-                result = concat(results, axis=1, copy=False, keys=self.columns)
+                result = results[0]._concat_horizontal(results)
                 cons = cast(Type["DataFrame"], self._constructor)
                 result = cons(result)
+                result.columns = self.columns
                 result = result.__finalize__(self, method="convert_dtypes")
                 # https://github.com/python/mypy/issues/8354
                 return cast(Self, result)
@@ -11820,6 +11819,40 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
     @doc(first_valid_index, position="last", klass=_shared_doc_kwargs["klass"])
     def last_valid_index(self) -> Hashable | None:
         return self._find_valid_index(how="last")
+
+    @classmethod
+    def _concat_horizontal(cls, to_concat: list[Self]) -> DataFrame:
+        """
+        Concat specalized to axis=1. Any necessary reindexing should already be
+        done, i.e. we know that indexes all match.
+        """
+        # error: Incompatible return value type (got "Union[DataFrame, Series]",
+        # expected "DataFrame")
+        return concat(  # type: ignore[return-value]
+            # error: Argument 1 to "concat" has incompatible type "List[Self]";
+            # expected "Union[Iterable[Union[Series, DataFrame]],
+            # Mapping[<nothing>, Union[Series, DataFrame]]]"
+            to_concat,  # type: ignore[arg-type]
+            axis=1,
+            copy=False,
+        )
+
+    @classmethod
+    def _concat_vertical(cls, to_concat: list[Self]) -> Self:
+        """
+        Concat specalized to axis=0. Any necessary reindexing should already be
+        done, i.e. we know that columns all match.
+        """
+        # error: Incompatible return value type (got "Union[DataFrame, Series]",
+        # expected "Self")
+        return concat(  # type: ignore[return-value]
+            # error: Argument 1 to "concat" has incompatible type "List[Self]";
+            # expected "Union[Iterable[Union[Series, DataFrame]],
+            # Mapping[<nothing>, Union[Series, DataFrame]]]"
+            to_concat,  # type: ignore[arg-type]
+            axis=0,
+            copy=False,
+        )
 
 
 _num_doc = """

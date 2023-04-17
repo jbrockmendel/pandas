@@ -3230,7 +3230,6 @@ class Series(base.IndexOpsMixin, NDFrame):  # type: ignore[misc]
         falcon      NaN
         dtype: float64
         """
-        from pandas.core.reshape.concat import concat
 
         new_index = self.index.union(other.index)
 
@@ -3244,7 +3243,7 @@ class Series(base.IndexOpsMixin, NDFrame):  # type: ignore[misc]
 
         if this.dtype.kind == "M" and other.dtype.kind != "M":
             other = to_datetime(other)
-        combined = concat([this, other])
+        combined = this._concat_vertical([this, other])
         combined = combined.reindex(new_index, copy=False)
         return combined.__finalize__(self, method="combine_first")
 

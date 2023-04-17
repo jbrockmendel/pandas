@@ -2289,11 +2289,8 @@ class Categorical(NDArrayBackedExtensionArray, PandasObject, ObjectStringArrayMi
         counts = self.value_counts(dropna=False)
         freqs = counts / counts.sum()
 
-        from pandas import Index
-        from pandas.core.reshape.concat import concat
-
-        result = concat([counts, freqs], axis=1)
-        result.columns = Index(["counts", "freqs"])
+        result = counts._concat_horizontal([counts, freqs])
+        result.columns = ["counts", "freqs"]
         result.index.name = "categories"
 
         return result

@@ -85,7 +85,6 @@ from pandas.core.indexes.api import (
 )
 from pandas.core.indexes.datetimes import DatetimeIndex
 from pandas.core.indexes.timedeltas import TimedeltaIndex
-from pandas.core.reshape.concat import concat
 
 from pandas.io.common import (
     check_parent_directory,
@@ -313,7 +312,9 @@ class SeriesFormatter:
                 series = series.iloc[:max_rows]
             else:
                 row_num = max_rows // 2
-                series = concat((series.iloc[:row_num], series.iloc[-row_num:]))
+                series = series._concat_vertical(
+                    [series.iloc[:row_num], series.iloc[-row_num:]]
+                )
             self.tr_row_num = row_num
         else:
             self.tr_row_num = None
@@ -808,7 +809,7 @@ class DataFrameFormatter:
         if col_num >= 1:
             left = self.tr_frame.iloc[:, :col_num]
             right = self.tr_frame.iloc[:, -col_num:]
-            self.tr_frame = concat((left, right), axis=1)
+            self.tr_frame = self.tr_frame._concat_horizontal([left, right])
 
             # truncate formatter
             if isinstance(self.formatters, (list, tuple)):
@@ -833,7 +834,7 @@ class DataFrameFormatter:
         if row_num >= 1:
             head = self.tr_frame.iloc[:row_num, :]
             tail = self.tr_frame.iloc[-row_num:, :]
-            self.tr_frame = concat((head, tail))
+            self.tr_frame = self.tr_frame._concat_vertical([head, tail])
         else:
             row_num = cast(int, self.max_rows)
             self.tr_frame = self.tr_frame.iloc[:row_num, :]

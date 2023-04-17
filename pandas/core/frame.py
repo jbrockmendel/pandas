@@ -10314,7 +10314,6 @@ class DataFrame(NDFrame, OpsMixin):
         2   0.7   0.0
         3   0.2   0.0
         """
-        from pandas.core.reshape.concat import concat
 
         def _dict_round(df: DataFrame, decimals):
             for col, vals in df.items():
@@ -10352,9 +10351,9 @@ class DataFrame(NDFrame, OpsMixin):
             raise TypeError("decimals must be an integer, a dict-like or a Series")
 
         if new_cols is not None and len(new_cols) > 0:
-            return self._constructor(
-                concat(new_cols, axis=1), index=self.index, columns=self.columns
-            ).__finalize__(self, method="round")
+            new_obj = self._concat_horizontal(new_cols)
+            result = self._constructor(new_obj, index=self.index, columns=self.columns)
+            return result.__finalize__(self, method="round")
         else:
             return self.copy(deep=False)
 
@@ -11704,16 +11703,12 @@ class DataFrame(NDFrame, OpsMixin):
         dog        False      False
         """
         if isinstance(values, dict):
-            from pandas.core.reshape.concat import concat
-
             values = collections.defaultdict(list, values)
-            result = concat(
-                (
-                    self.iloc[:, [i]].isin(values[col])
-                    for i, col in enumerate(self.columns)
-                ),
-                axis=1,
-            )
+            frames = [
+                self.iloc[:, [i]].isin(values[col])
+                for i, col in enumerate(self.columns)
+            ]
+            result = self._concat_horizontal(frames)
         elif isinstance(values, Series):
             if not values.index.is_unique:
                 raise ValueError("cannot compute isin with a duplicate axis.")
