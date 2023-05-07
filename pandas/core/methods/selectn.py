@@ -86,8 +86,6 @@ class SelectNSeries(SelectN):
     """
 
     def compute(self, method: str) -> Series:
-        from pandas.core.reshape.concat import concat
-
         n = self.n
         dtype = self.obj.dtype
         if not self.is_valid_dtype_n_method(dtype):
@@ -154,7 +152,7 @@ class SelectNSeries(SelectN):
             # reverse indices
             inds = narr - 1 - inds
 
-        return concat([dropped.iloc[inds], nan_index]).iloc[:findex]
+        return dropped._concat_vertical([dropped.iloc[inds], nan_index]).iloc[:findex]
 
 
 class SelectNFrame(SelectN):

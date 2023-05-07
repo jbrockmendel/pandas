@@ -126,7 +126,8 @@ def melt(
         if not isinstance(id_data.dtype, np.dtype):
             # i.e. ExtensionDtype
             if K > 0:
-                mdata[col] = concat([id_data] * K, ignore_index=True)
+                id_values = id_data._values
+                mdata[col] = id_values._concat_same_type([id_values] * K)
             else:
                 # We can't concat empty list. (GH 46044)
                 mdata[col] = type(id_data)([], name=id_data.name, dtype=id_data.dtype)

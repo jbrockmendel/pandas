@@ -72,6 +72,7 @@ from pandas.core.dtypes.common import (
     pandas_dtype,
     validate_all_hashable,
 )
+from pandas.core.dtypes.concat import concat_compat
 from pandas.core.dtypes.dtypes import ExtensionDtype
 from pandas.core.dtypes.generic import ABCDataFrame
 from pandas.core.dtypes.inference import is_hashable
@@ -6042,3 +6043,31 @@ class Series(base.IndexOpsMixin, NDFrame):  # type: ignore[misc]
     @doc(make_doc("cumprod", 1))
     def cumprod(self, axis: Axis | None = None, skipna: bool = True, *args, **kwargs):
         return NDFrame.cumprod(self, axis, skipna, *args, **kwargs)
+
+    # ----------------------------------------------------------------------
+
+    @classmethod
+    def _concat_horizontal(cls, to_concat: list[Self]) -> DataFrame:
+        """
+        Concat specalized to axis=1. Any necessary reindexing should already be
+        done, i.e. we know that indexes all match.
+        """
+        return super()._concat_horizontal(to_concat)
+
+    @classmethod
+    def _concat_vertical(cls, to_concat: list[Self]) -> Self:
+        """
+        Concat specalized to axis=0. Any necessary reindexing should already be
+        done, i.e. we know that columns all match.
+        """
+        arrs = [ser._values for ser in to_concat]
+        indexes = [ser.index for ser in to_concat]
+
+        res_values = concat_compat(arrs, axis=0)
+        new_index = indexes[0].append(indexes[1:])
+
+        mgr = type(to_concat[0]._mgr).from_array(res_values, index=new_index)
+
+        name = com.consensus_name_attr(to_concat)
+        result = to_concat[0]._constructor(mgr, name=name, fastpath=True)
+        return result

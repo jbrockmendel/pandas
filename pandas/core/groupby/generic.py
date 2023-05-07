@@ -2712,14 +2712,12 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
 def _wrap_transform_general_frame(
     obj: DataFrame, group: DataFrame, res: DataFrame | Series
 ) -> DataFrame:
-    from pandas import concat
-
     if isinstance(res, Series):
         # we need to broadcast across the
         # other dimension; this will preserve dtypes
         # GH14457
         if res.index.is_(obj.index):
-            res_frame = concat([res] * len(group.columns), axis=1)
+            res_frame = res._concat_horizontal([res] * len(group.columns))
             res_frame.columns = group.columns
             res_frame.index = group.index
         else:

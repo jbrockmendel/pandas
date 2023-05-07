@@ -24,7 +24,6 @@ from pandas import (
     DatetimeIndex,
     Series,
     Timestamp,
-    concat,
     date_range,
 )
 
@@ -477,10 +476,7 @@ class AbstractHolidayCalendar(metaclass=HolidayCalendarMetaClass):
                 rule.dates(start, end, return_name=True) for rule in self.rules
             ]
             if pre_holidays:
-                # error: Argument 1 to "concat" has incompatible type
-                # "List[Union[Series, DatetimeIndex]]"; expected
-                # "Union[Iterable[DataFrame], Mapping[<nothing>, DataFrame]]"
-                holidays = concat(pre_holidays)  # type: ignore[arg-type]
+                holidays = Series._concat_vertical(pre_holidays)
             else:
                 # error: Incompatible types in assignment (expression has type
                 # "Series", variable has type "DataFrame")
