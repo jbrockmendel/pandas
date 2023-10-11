@@ -223,7 +223,7 @@ class DatetimeIndexOpsMixin(NDArrayBackedExtensionIndex, ABC):
 
     @property
     def _formatter_func(self):
-        return self._data._formatter()
+        return self._data._formatter(boxed=True)
 
     def _format_attrs(self):
         """

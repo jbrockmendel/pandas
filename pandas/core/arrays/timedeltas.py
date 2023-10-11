@@ -463,7 +463,7 @@ class TimedeltaArray(dtl.TimelikeOps):
     def _formatter(self, boxed: bool = False):
         from pandas.io.formats.format import get_format_timedelta64
 
-        return get_format_timedelta64(self, box=True)
+        return get_format_timedelta64(self, box=boxed)
 
     def _format_native_types(
         self, *, na_rep: str | float = "NaT", date_format=None, **kwargs

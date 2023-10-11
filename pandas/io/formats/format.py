@@ -54,6 +54,7 @@ from pandas.core.dtypes.dtypes import (
     CategoricalDtype,
     DatetimeTZDtype,
     ExtensionDtype,
+    PeriodDtype,
 )
 from pandas.core.dtypes.missing import (
     isna,
@@ -1519,7 +1520,10 @@ class _ExtensionArrayFormatter(_GenericArrayFormatter):
         formatter = self.formatter
         fallback_formatter = None
         if formatter is None:
-            fallback_formatter = values._formatter(boxed=True)
+            # TODO: avoid special-casing Period; we also dont-box
+            #  in the dt64/dt64tz/td64 cases
+            boxed = not isinstance(values.dtype, PeriodDtype)
+            fallback_formatter = values._formatter(boxed=boxed)
 
         if isinstance(values, Categorical):
             # Categorical is special for now, so that we can preserve tzinfo

@@ -389,9 +389,9 @@ class SharedTests:
             expected = (
                 f"<{type(arr2d).__name__}>\n"
                 "[\n"
-                f"['{arr1d[0]._repr_base()}'],\n"
-                f"['{arr1d[1]._repr_base()}'],\n"
-                f"['{arr1d[2]._repr_base()}']\n"
+                f"[{arr1d[0]._repr_base()}],\n"
+                f"[{arr1d[1]._repr_base()}],\n"
+                f"[{arr1d[2]._repr_base()}]\n"
                 "]\n"
                 f"Shape: (3, 1), dtype: {arr1d.dtype}"
             )
@@ -399,9 +399,9 @@ class SharedTests:
             expected = (
                 f"<{type(arr2d).__name__}>\n"
                 "[\n"
-                f"['{arr1d[0]}'],\n"
-                f"['{arr1d[1]}'],\n"
-                f"['{arr1d[2]}']\n"
+                f"[{arr1d[0]}],\n"
+                f"[{arr1d[1]}],\n"
+                f"[{arr1d[2]}]\n"
                 "]\n"
                 f"Shape: (3, 1), dtype: {arr1d.dtype}"
             )

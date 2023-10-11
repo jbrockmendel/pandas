@@ -754,8 +754,8 @@ class PeriodArray(dtl.DatelikeOps, libperiod.PeriodMixin):  # type: ignore[misc]
 
     def _formatter(self, boxed: bool = False):
         if boxed:
-            return str
-        return "'{}'".format
+            return "'{}'".format
+        return str
 
     def _format_native_types(
         self, *, na_rep: str | float = "NaT", date_format=None, **kwargs
