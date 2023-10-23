@@ -801,6 +801,14 @@ class TestTimestampConstructors:
         assert result.hour == expected.hour
         assert result == expected
 
+    def test_timestamp_constructor_tz_utc(self):
+        utc_stamp = Timestamp("3/11/2012 05:00", tz="utc")
+        assert utc_stamp.tzinfo is timezone.utc
+        assert utc_stamp.hour == 5
+
+        utc_stamp = Timestamp("3/11/2012 05:00").tz_localize("utc")
+        assert utc_stamp.hour == 5
+
 
 def test_constructor_ambiguous_dst():
     # GH 24329

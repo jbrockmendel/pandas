@@ -26,7 +26,6 @@ from pytz import utc
 from pandas._libs.tslibs.dtypes import NpyDatetimeUnit
 from pandas._libs.tslibs.timezones import (
     dateutil_gettz as gettz,
-    get_timezone,
     maybe_get_tz,
     tz_compare,
 )
@@ -286,7 +285,7 @@ class TestTimestamp:
         assert conv.hour == 19
 
     def test_utc_z_designator(self):
-        assert get_timezone(Timestamp("2014-11-02 01:00Z").tzinfo) is timezone.utc
+        assert Timestamp("2014-11-02 01:00Z").tzinfo is timezone.utc
 
     def test_asm8(self):
         ns = [Timestamp.min._value, Timestamp.max._value, 1000]
@@ -542,28 +541,6 @@ class TestTimestampNsOperations:
         assert repr(t) == "Timestamp('2011-01-01 00:00:00.000000010')"
         assert t._value == expected
         assert t.nanosecond == 10
-
-
-class TestTimestampToJulianDate:
-    def test_compare_1700(self):
-        r = Timestamp("1700-06-23").to_julian_date()
-        assert r == 2_342_145.5
-
-    def test_compare_2000(self):
-        r = Timestamp("2000-04-12").to_julian_date()
-        assert r == 2_451_646.5
-
-    def test_compare_2100(self):
-        r = Timestamp("2100-08-12").to_julian_date()
-        assert r == 2_488_292.5
-
-    def test_compare_hour01(self):
-        r = Timestamp("2000-08-12T01:00:00").to_julian_date()
-        assert r == 2_451_768.5416666666666666
-
-    def test_compare_hour13(self):
-        r = Timestamp("2000-08-12T13:00:00").to_julian_date()
-        assert r == 2_451_769.0416666666666666
 
 
 class TestTimestampConversion:
