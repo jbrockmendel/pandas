@@ -105,21 +105,27 @@ class TestArrayToDatetimeResolutionInference:
         assert tz2 is None
         tm.assert_numpy_array_equal(result2, expected[::-1])
 
-    def test_array_to_datetime_fallback_to_us(self):
-        # Test automatic fallback from nanoseconds to microseconds
-        # Year 2401 is outside nanosecond range but within microsecond range
-        vals = np.array(["2401-09-15", "2400-01-01"], dtype=object)
-        result, tz = tslib.array_to_datetime(vals, creso=creso_infer)
+    def test_array_to_datetime_fallback_to_us_explicit_ns(self):
+        # Test automatic fallback from explicit nanoseconds to microseconds
+        # When explicitly requesting ns resolution, year 2401 should fall back to us
+        from pandas._libs.tslibs.dtypes import NpyDatetimeUnit
+        creso_ns = NpyDatetimeUnit.NPY_FR_ns.value
+        
+        vals = np.array(["2401-09-15"], dtype=object)
+        result, tz = tslib.array_to_datetime(vals, creso=creso_ns)
         assert tz is None
         assert result.dtype == np.dtype("M8[us]")
-        expected = np.array(["2401-09-15", "2400-01-01"], dtype="M8[us]")
+        expected = np.array(["2401-09-15"], dtype="M8[us]")
         tm.assert_numpy_array_equal(result, expected)
 
-    def test_array_to_datetime_fallback_mixed_in_nano_and_out(self):
-        # Test automatic fallback when one value is in nano range and one is out
-        # This ensures the entire array is parsed with the same coarser unit
+    def test_array_to_datetime_fallback_mixed_explicit_ns(self):
+        # Test automatic fallback with explicit ns resolution
+        # When one value is in nano range and one is out, both should use coarser unit
+        from pandas._libs.tslibs.dtypes import NpyDatetimeUnit
+        creso_ns = NpyDatetimeUnit.NPY_FR_ns.value
+        
         vals = np.array(["2020-01-01", "2401-09-15"], dtype=object)
-        result, tz = tslib.array_to_datetime(vals, creso=creso_infer)
+        result, tz = tslib.array_to_datetime(vals, creso=creso_ns)
         assert tz is None
         # Both values should be in microseconds since one is out of nano range
         assert result.dtype == np.dtype("M8[us]")

@@ -326,8 +326,11 @@ cpdef array_to_datetime(
     
     while True:
         try:
+            # When falling back to coarser units, don't pass unit_for_numerics
+            # because it's meant for ns resolution only
+            fallback_unit_for_numerics = unit_for_numerics if fallback_creso == original_creso else None
             return _array_to_datetime_impl(
-                values, errors, dayfirst, yearfirst, utc, fallback_creso, unit_for_numerics
+                values, errors, dayfirst, yearfirst, utc, fallback_creso, fallback_unit_for_numerics
             )
         except (OutOfBoundsDatetime, OverflowError):
             # Only attempt fallback if we're in inference mode or creso is one
@@ -341,9 +344,11 @@ cpdef array_to_datetime(
                 raise
             
             # If we're in inference mode and haven't set a fallback yet,
-            # start from nanoseconds
+            # start from nanoseconds for the first retry
             if infer_reso and fallback_creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
                 fallback_creso = NPY_DATETIMEUNIT.NPY_FR_ns
+                # Continue to retry with ns
+                continue
             
             # Try the next coarser unit
             fallback_creso = get_next_coarser_unit(fallback_creso)
@@ -526,7 +531,7 @@ cdef _array_to_datetime_impl(
                 dayfirst=dayfirst,
                 utc=utc,
                 creso=state.creso,
-                unit_for_numerics=unit_for_numerics,
+                unit_for_numerics=None,
             )
         elif state.creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
             # i.e. we never encountered anything non-NaT, default to "s". This

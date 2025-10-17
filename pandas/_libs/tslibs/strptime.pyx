@@ -407,9 +407,11 @@ def array_strptime(
                 raise
             
             # If we're in inference mode and haven't set a fallback yet,
-            # start from nanoseconds
+            # start from nanoseconds for the first retry
             if infer_reso and fallback_creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
                 fallback_creso = NPY_DATETIMEUNIT.NPY_FR_ns
+                # Continue to retry with ns
+                continue
             
             # Try the next coarser unit
             fallback_creso = get_next_coarser_unit(fallback_creso)
