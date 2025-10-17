@@ -20,6 +20,7 @@ def array_to_datetime(
     utc: bool = ...,
     creso: int = ...,
     unit_for_numerics: str | None = ...,
+    allow_fallback: bool = ...,
 ) -> tuple[np.ndarray, tzinfo | None]: ...
 
 # returned ndarray may be object dtype or datetime64[ns]

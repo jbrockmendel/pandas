@@ -265,6 +265,7 @@ cpdef array_to_datetime(
     bint utc=False,
     NPY_DATETIMEUNIT creso=NPY_DATETIMEUNIT.NPY_FR_GENERIC,
     str unit_for_numerics=None,
+    bint allow_fallback=False,
 ):
     """
     Converts a 1D array of date-like values to a numpy array of either:
@@ -292,8 +293,12 @@ cpdef array_to_datetime(
     utc : bool, default False
         indicator whether the dates should be UTC
     creso : NPY_DATETIMEUNIT, default NPY_FR_GENERIC
-        If NPY_FR_GENERIC, conduct inference.
+        If NPY_FR_GENERIC, conduct inference starting with ns and falling back
+        to coarser resolutions on OutOfBoundsDatetime.
     unit_for_numerics : str, default "ns"
+    allow_fallback : bool, default False
+        Internal parameter to enable fallback to coarser resolutions.
+        Set automatically when creso is NPY_FR_GENERIC.
 
     Returns
     -------
@@ -320,8 +325,13 @@ cpdef array_to_datetime(
     # specify error conditions
     assert is_raise or is_coerce
 
+    # Set allow_fallback if in inference mode
+    if infer_reso:
+        allow_fallback = True
+
     if infer_reso:
         abbrev = "ns"
+        creso = NPY_FR_ns
     else:
         abbrev = npy_unit_to_abbrev(creso)
 
@@ -344,29 +354,26 @@ cpdef array_to_datetime(
                 iresult[i] = NPY_NAT
 
             elif PyDateTime_Check(val):
-                if isinstance(val, _Timestamp):
-                    item_reso = val._creso
-                else:
-                    item_reso = NPY_DATETIMEUNIT.NPY_FR_us
-                state.update_creso(item_reso)
-                if infer_reso:
-                    creso = state.creso
+                if not infer_reso:
+                    if isinstance(val, _Timestamp):
+                        item_reso = val._creso
+                    else:
+                        item_reso = NPY_DATETIMEUNIT.NPY_FR_us
+                    state.update_creso(item_reso)
                 tz_out = state.process_datetime(val, tz_out, utc_convert)
                 iresult[i] = parse_pydatetime(val, &dts, creso=creso)
 
             elif PyDate_Check(val):
-                item_reso = NPY_DATETIMEUNIT.NPY_FR_s
-                state.update_creso(item_reso)
-                if infer_reso:
-                    creso = state.creso
+                if not infer_reso:
+                    item_reso = NPY_DATETIMEUNIT.NPY_FR_s
+                    state.update_creso(item_reso)
                 iresult[i] = pydate_to_dt64(val, &dts, reso=creso)
                 state.found_other = True
 
             elif cnp.is_datetime64_object(val):
-                item_reso = get_supported_reso(get_datetime64_unit(val))
-                state.update_creso(item_reso)
-                if infer_reso:
-                    creso = state.creso
+                if not infer_reso:
+                    item_reso = get_supported_reso(get_datetime64_unit(val))
+                    state.update_creso(item_reso)
                 iresult[i] = get_datetime64_nanos(val, creso)
                 state.found_other = True
 
@@ -376,10 +383,9 @@ cpdef array_to_datetime(
                 if val != val or val == NPY_NAT:
                     iresult[i] = NPY_NAT
                 else:
-                    item_reso = NPY_FR_ns
-                    state.update_creso(item_reso)
-                    if infer_reso:
-                        creso = state.creso
+                    if not infer_reso:
+                        item_reso = NPY_FR_ns
+                        state.update_creso(item_reso)
 
                     # we now need to parse this as if unit=abbrev
                     iresult[i] = cast_from_unit(val, unit_for_numerics, out_reso=creso)
@@ -395,10 +401,9 @@ cpdef array_to_datetime(
                 if parse_today_now(val, &iresult[i], utc, creso, infer_reso=infer_reso):
                     # We can't _quite_ dispatch this to convert_str_to_tsobject
                     #  bc there isn't a nice way to pass "utc"
-                    item_reso = NPY_DATETIMEUNIT.NPY_FR_us
-                    state.update_creso(item_reso)
-                    if infer_reso:
-                        creso = state.creso
+                    if not infer_reso:
+                        item_reso = NPY_DATETIMEUNIT.NPY_FR_us
+                        state.update_creso(item_reso)
                     continue
 
                 tsobj = convert_str_to_tsobject(
@@ -414,10 +419,9 @@ cpdef array_to_datetime(
                     iresult[i] = tsobj.value
                     continue
 
-                item_reso = tsobj.creso
-                state.update_creso(item_reso)
-                if infer_reso:
-                    creso = state.creso
+                if not infer_reso:
+                    item_reso = tsobj.creso
+                    state.update_creso(item_reso)
 
                 tsobj.ensure_reso(creso, val)
                 iresult[i] = tsobj.value
@@ -438,6 +442,48 @@ cpdef array_to_datetime(
             else:
                 raise TypeError(f"{type(val)} is not convertible to datetime")
 
+        except OutOfBoundsDatetime:
+            if allow_fallback and is_raise:
+                # In inference/fallback mode, try falling back to coarser resolutions
+                if creso == NPY_FR_ns:
+                    return array_to_datetime(
+                        values,
+                        errors=errors,
+                        yearfirst=yearfirst,
+                        dayfirst=dayfirst,
+                        utc=utc,
+                        creso=NPY_DATETIMEUNIT.NPY_FR_us,
+                        unit_for_numerics=unit_for_numerics,
+                        allow_fallback=True,
+                    )
+                elif creso == NPY_DATETIMEUNIT.NPY_FR_us:
+                    return array_to_datetime(
+                        values,
+                        errors=errors,
+                        yearfirst=yearfirst,
+                        dayfirst=dayfirst,
+                        utc=utc,
+                        creso=NPY_DATETIMEUNIT.NPY_FR_ms,
+                        unit_for_numerics=unit_for_numerics,
+                        allow_fallback=True,
+                    )
+                elif creso == NPY_DATETIMEUNIT.NPY_FR_ms:
+                    return array_to_datetime(
+                        values,
+                        errors=errors,
+                        yearfirst=yearfirst,
+                        dayfirst=dayfirst,
+                        utc=utc,
+                        creso=NPY_DATETIMEUNIT.NPY_FR_s,
+                        unit_for_numerics=unit_for_numerics,
+                        allow_fallback=True,
+                    )
+                else:
+                    # No more fallback options, re-raise
+                    raise
+            else:
+                # Explicit unit or coerce mode, re-raise or handle normally
+                raise
         except (TypeError, OverflowError, ValueError) as ex:
             ex.args = (f"{ex}",)
             if is_coerce:
@@ -449,7 +495,8 @@ cpdef array_to_datetime(
 
     tz_out = state.check_for_mixed_inputs(tz_out, utc)
 
-    if infer_reso:
+    if not infer_reso:
+        # Only for explicit resolution: check for mismatched resolutions
         if state.creso_ever_changed:
             # We encountered mismatched resolutions, need to re-parse with
             #  the correct one.
@@ -461,16 +508,6 @@ cpdef array_to_datetime(
                 utc=utc,
                 creso=state.creso,
             )
-        elif state.creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
-            # i.e. we never encountered anything non-NaT, default to "s". This
-            # ensures that insert and concat-like operations with NaT
-            # do not upcast units
-            result = iresult.view("M8[s]").reshape(result.shape)
-        else:
-            # Otherwise we can use the single reso that we encountered and avoid
-            #  a second pass.
-            abbrev = npy_unit_to_abbrev(state.creso)
-            result = iresult.view(f"M8[{abbrev}]").reshape(result.shape)
     return result, tz_out
 
 
