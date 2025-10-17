@@ -326,8 +326,8 @@ cpdef array_to_datetime(
     
     while True:
         try:
-            # When falling back to coarser units, don't pass unit_for_numerics
-            # because it's meant for ns resolution only
+            # When falling back to coarser units, set unit_for_numerics to None
+            # so it will be computed from fallback_creso inside _array_to_datetime_impl
             fallback_unit_for_numerics = unit_for_numerics if fallback_creso == original_creso else None
             return _array_to_datetime_impl(
                 values, errors, dayfirst, yearfirst, utc, fallback_creso, fallback_unit_for_numerics
