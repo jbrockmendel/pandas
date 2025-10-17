@@ -105,6 +105,27 @@ class TestArrayToDatetimeResolutionInference:
         assert tz2 is None
         tm.assert_numpy_array_equal(result2, expected[::-1])
 
+    def test_array_to_datetime_fallback_to_us(self):
+        # Test automatic fallback from nanoseconds to microseconds
+        # Year 2401 is outside nanosecond range but within microsecond range
+        vals = np.array(["2401-09-15", "2400-01-01"], dtype=object)
+        result, tz = tslib.array_to_datetime(vals, creso=creso_infer)
+        assert tz is None
+        assert result.dtype == np.dtype("M8[us]")
+        expected = np.array(["2401-09-15", "2400-01-01"], dtype="M8[us]")
+        tm.assert_numpy_array_equal(result, expected)
+
+    def test_array_to_datetime_fallback_mixed_in_nano_and_out(self):
+        # Test automatic fallback when one value is in nano range and one is out
+        # This ensures the entire array is parsed with the same coarser unit
+        vals = np.array(["2020-01-01", "2401-09-15"], dtype=object)
+        result, tz = tslib.array_to_datetime(vals, creso=creso_infer)
+        assert tz is None
+        # Both values should be in microseconds since one is out of nano range
+        assert result.dtype == np.dtype("M8[us]")
+        expected = np.array(["2020-01-01", "2401-09-15"], dtype="M8[us]")
+        tm.assert_numpy_array_equal(result, expected)
+
 
 class TestArrayToDatetimeWithTZResolutionInference:
     def test_array_to_datetime_with_tz_resolution(self):

@@ -89,6 +89,22 @@ from pandas._libs.tslibs.tzconversion cimport tz_localize_to_utc_single
 cnp.import_array()
 
 
+cdef NPY_DATETIMEUNIT get_next_coarser_unit(NPY_DATETIMEUNIT creso):
+    """
+    Get the next coarser unit in the sequence: ns -> us -> ms -> s
+    Returns NPY_FR_GENERIC if there is no coarser unit available.
+    """
+    if creso == NPY_DATETIMEUNIT.NPY_FR_ns:
+        return NPY_DATETIMEUNIT.NPY_FR_us
+    elif creso == NPY_DATETIMEUNIT.NPY_FR_us:
+        return NPY_DATETIMEUNIT.NPY_FR_ms
+    elif creso == NPY_DATETIMEUNIT.NPY_FR_ms:
+        return NPY_DATETIMEUNIT.NPY_FR_s
+    else:
+        # No coarser unit available
+        return NPY_DATETIMEUNIT.NPY_FR_GENERIC
+
+
 cdef bint format_is_iso(f: str):
     """
     Does format match the iso8601 set that can be handled by the C parser?
@@ -368,7 +384,52 @@ def array_strptime(
     creso : NPY_DATETIMEUNIT, default NPY_FR_GENERIC
         Set to NPY_FR_GENERIC to infer a resolution.
     """
+    # Try to parse with the given resolution, falling back to coarser units if needed
+    cdef:
+        NPY_DATETIMEUNIT fallback_creso = creso
+        NPY_DATETIMEUNIT original_creso = creso
+        bint infer_reso = creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC
+    
+    while True:
+        try:
+            return _array_strptime_impl(
+                values, fmt, exact, errors, utc, fallback_creso
+            )
+        except OutOfBoundsDatetime:
+            # Only attempt fallback if we're in inference mode or creso is one
+            # of the finer resolutions (ns, us, ms)
+            if not infer_reso and original_creso not in (
+                NPY_DATETIMEUNIT.NPY_FR_ns,
+                NPY_DATETIMEUNIT.NPY_FR_us,
+                NPY_DATETIMEUNIT.NPY_FR_ms,
+            ):
+                # User explicitly requested a coarse resolution, don't fall back
+                raise
+            
+            # If we're in inference mode and haven't set a fallback yet,
+            # start from nanoseconds
+            if infer_reso and fallback_creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
+                fallback_creso = NPY_DATETIMEUNIT.NPY_FR_ns
+            
+            # Try the next coarser unit
+            fallback_creso = get_next_coarser_unit(fallback_creso)
+            if fallback_creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
+                # No coarser unit available, re-raise the error
+                raise
+            # Continue with coarser unit
 
+
+cdef _array_strptime_impl(
+    ndarray[object] values,
+    str fmt,
+    bint exact,
+    str errors,
+    bint utc,
+    NPY_DATETIMEUNIT creso,
+):
+    """
+    Internal implementation of array_strptime with a specific resolution.
+    """
     cdef:
         Py_ssize_t i, n = len(values)
         npy_datetimestruct dts
@@ -565,7 +626,7 @@ def array_strptime(
         if state.creso_ever_changed:
             # We encountered mismatched resolutions, need to re-parse with
             #  the correct one.
-            return array_strptime(
+            return _array_strptime_impl(
                 values,
                 fmt=fmt,
                 exact=exact,
