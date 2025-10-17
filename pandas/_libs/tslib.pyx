@@ -55,23 +55,6 @@ from pandas._libs.util cimport (
 
 from pandas._libs.tslibs.np_datetime import OutOfBoundsDatetime
 
-
-cdef NPY_DATETIMEUNIT get_next_coarser_unit(NPY_DATETIMEUNIT creso):
-    """
-    Get the next coarser unit in the sequence: ns -> us -> ms -> s
-    Returns NPY_FR_GENERIC if there is no coarser unit available.
-    """
-    if creso == NPY_DATETIMEUNIT.NPY_FR_ns:
-        return NPY_DATETIMEUNIT.NPY_FR_us
-    elif creso == NPY_DATETIMEUNIT.NPY_FR_us:
-        return NPY_DATETIMEUNIT.NPY_FR_ms
-    elif creso == NPY_DATETIMEUNIT.NPY_FR_ms:
-        return NPY_DATETIMEUNIT.NPY_FR_s
-    else:
-        # No coarser unit available
-        return NPY_DATETIMEUNIT.NPY_FR_GENERIC
-
-
 from pandas._libs.tslibs.conversion cimport (
     _TSObject,
     cast_from_unit,
@@ -100,6 +83,22 @@ from pandas._libs.tslibs.timestamps import Timestamp
 
 from pandas._libs.missing cimport checknull_with_nat_and_na
 from pandas._libs.tslibs.tzconversion cimport tz_localize_to_utc_single
+
+
+cdef NPY_DATETIMEUNIT get_next_coarser_unit(NPY_DATETIMEUNIT creso):
+    """
+    Get the next coarser unit in the sequence: ns -> us -> ms -> s
+    Returns NPY_FR_GENERIC if there is no coarser unit available.
+    """
+    if creso == NPY_DATETIMEUNIT.NPY_FR_ns:
+        return NPY_DATETIMEUNIT.NPY_FR_us
+    elif creso == NPY_DATETIMEUNIT.NPY_FR_us:
+        return NPY_DATETIMEUNIT.NPY_FR_ms
+    elif creso == NPY_DATETIMEUNIT.NPY_FR_ms:
+        return NPY_DATETIMEUNIT.NPY_FR_s
+    else:
+        # No coarser unit available
+        return NPY_DATETIMEUNIT.NPY_FR_GENERIC
 
 
 def _test_parse_iso8601(ts: str):
@@ -318,60 +317,6 @@ cpdef array_to_datetime(
         May be datetime64[creso_unit] or object dtype
     tzinfo or None
     """
-    # Try to parse with the given resolution, falling back to coarser units if needed
-    cdef:
-        NPY_DATETIMEUNIT fallback_creso = creso
-        NPY_DATETIMEUNIT original_creso = creso
-        bint infer_reso = creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC
-    
-    while True:
-        try:
-            # When falling back to coarser units, set unit_for_numerics to None
-            # so it will be computed from fallback_creso inside _array_to_datetime_impl
-            fallback_unit_for_numerics = unit_for_numerics if fallback_creso == original_creso else None
-            return _array_to_datetime_impl(
-                values, errors, dayfirst, yearfirst, utc, fallback_creso, fallback_unit_for_numerics
-            )
-        except (OutOfBoundsDatetime, OverflowError):
-            # Only attempt fallback if we're in inference mode or creso is one
-            # of the finer resolutions (ns, us, ms)
-            if not infer_reso and original_creso not in (
-                NPY_DATETIMEUNIT.NPY_FR_ns,
-                NPY_DATETIMEUNIT.NPY_FR_us,
-                NPY_DATETIMEUNIT.NPY_FR_ms,
-            ):
-                # User explicitly requested a coarse resolution, don't fall back
-                raise
-            
-            # If we're in inference mode and haven't set a fallback yet,
-            # start from nanoseconds for the first retry
-            if infer_reso and fallback_creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
-                fallback_creso = NPY_DATETIMEUNIT.NPY_FR_ns
-                # Continue to retry with ns
-                continue
-            
-            # Try the next coarser unit
-            fallback_creso = get_next_coarser_unit(fallback_creso)
-            if fallback_creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
-                # No coarser unit available, re-raise the error
-                raise
-            # Continue with coarser unit
-
-
-@cython.wraparound(False)
-@cython.boundscheck(False)
-cdef _array_to_datetime_impl(
-    ndarray values,  # object dtype, arbitrary ndim
-    str errors,
-    bint dayfirst,
-    bint yearfirst,
-    bint utc,
-    NPY_DATETIMEUNIT creso,
-    str unit_for_numerics,
-):
-    """
-    Internal implementation of array_to_datetime with a specific resolution.
-    """
     cdef:
         Py_ssize_t i, n = values.size
         object val
@@ -423,14 +368,50 @@ cdef _array_to_datetime_impl(
                 if infer_reso:
                     creso = state.creso
                 tz_out = state.process_datetime(val, tz_out, utc_convert)
-                iresult[i] = parse_pydatetime(val, &dts, creso=creso)
+                try:
+                    iresult[i] = parse_pydatetime(val, &dts, creso=creso)
+                except OverflowError:
+                    if infer_reso:
+                        # During inference, try falling back to coarser unit
+                        next_creso = get_next_coarser_unit(creso)
+                        if next_creso != NPY_DATETIMEUNIT.NPY_FR_GENERIC:
+                            # Retry with coarser unit
+                            return array_to_datetime(
+                                values,
+                                errors=errors,
+                                dayfirst=dayfirst,
+                                yearfirst=yearfirst,
+                                utc=utc,
+                                creso=next_creso,
+                                unit_for_numerics=unit_for_numerics,
+                            )
+                    # Either not in inference mode or no coarser unit available
+                    raise
 
             elif PyDate_Check(val):
                 item_reso = NPY_DATETIMEUNIT.NPY_FR_s
                 state.update_creso(item_reso)
                 if infer_reso:
                     creso = state.creso
-                iresult[i] = pydate_to_dt64(val, &dts, reso=creso)
+                try:
+                    iresult[i] = pydate_to_dt64(val, &dts, reso=creso)
+                except OverflowError:
+                    if infer_reso:
+                        # During inference, try falling back to coarser unit
+                        next_creso = get_next_coarser_unit(creso)
+                        if next_creso != NPY_DATETIMEUNIT.NPY_FR_GENERIC:
+                            # Retry with coarser unit
+                            return array_to_datetime(
+                                values,
+                                errors=errors,
+                                dayfirst=dayfirst,
+                                yearfirst=yearfirst,
+                                utc=utc,
+                                creso=next_creso,
+                                unit_for_numerics=unit_for_numerics,
+                            )
+                    # Either not in inference mode or no coarser unit available
+                    raise
                 state.found_other = True
 
             elif cnp.is_datetime64_object(val):
@@ -524,14 +505,13 @@ cdef _array_to_datetime_impl(
         if state.creso_ever_changed:
             # We encountered mismatched resolutions, need to re-parse with
             #  the correct one.
-            return _array_to_datetime_impl(
+            return array_to_datetime(
                 values,
                 errors=errors,
                 yearfirst=yearfirst,
                 dayfirst=dayfirst,
                 utc=utc,
                 creso=state.creso,
-                unit_for_numerics=None,
             )
         elif state.creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
             # i.e. we never encountered anything non-NaT, default to "s". This

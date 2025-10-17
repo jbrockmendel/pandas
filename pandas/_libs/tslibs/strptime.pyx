@@ -384,54 +384,7 @@ def array_strptime(
     creso : NPY_DATETIMEUNIT, default NPY_FR_GENERIC
         Set to NPY_FR_GENERIC to infer a resolution.
     """
-    # Try to parse with the given resolution, falling back to coarser units if needed
-    cdef:
-        NPY_DATETIMEUNIT fallback_creso = creso
-        NPY_DATETIMEUNIT original_creso = creso
-        bint infer_reso = creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC
-    
-    while True:
-        try:
-            return _array_strptime_impl(
-                values, fmt, exact, errors, utc, fallback_creso
-            )
-        except OutOfBoundsDatetime:
-            # Only attempt fallback if we're in inference mode or creso is one
-            # of the finer resolutions (ns, us, ms)
-            if not infer_reso and original_creso not in (
-                NPY_DATETIMEUNIT.NPY_FR_ns,
-                NPY_DATETIMEUNIT.NPY_FR_us,
-                NPY_DATETIMEUNIT.NPY_FR_ms,
-            ):
-                # User explicitly requested a coarse resolution, don't fall back
-                raise
-            
-            # If we're in inference mode and haven't set a fallback yet,
-            # start from nanoseconds for the first retry
-            if infer_reso and fallback_creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
-                fallback_creso = NPY_DATETIMEUNIT.NPY_FR_ns
-                # Continue to retry with ns
-                continue
-            
-            # Try the next coarser unit
-            fallback_creso = get_next_coarser_unit(fallback_creso)
-            if fallback_creso == NPY_DATETIMEUNIT.NPY_FR_GENERIC:
-                # No coarser unit available, re-raise the error
-                raise
-            # Continue with coarser unit
 
-
-cdef _array_strptime_impl(
-    ndarray[object] values,
-    str fmt,
-    bint exact,
-    str errors,
-    bint utc,
-    NPY_DATETIMEUNIT creso,
-):
-    """
-    Internal implementation of array_strptime with a specific resolution.
-    """
     cdef:
         Py_ssize_t i, n = len(values)
         npy_datetimestruct dts
@@ -535,6 +488,20 @@ cdef _array_strptime_impl(
                 try:
                     value = npy_datetimestruct_to_datetime(creso, &dts)
                 except OverflowError as err:
+                    if infer_reso:
+                        # During inference, try falling back to coarser unit
+                        next_creso = get_next_coarser_unit(creso)
+                        if next_creso != NPY_DATETIMEUNIT.NPY_FR_GENERIC:
+                            # Retry with coarser unit
+                            return array_strptime(
+                                values,
+                                fmt=fmt,
+                                exact=exact,
+                                errors=errors,
+                                utc=utc,
+                                creso=next_creso,
+                            )
+                    # Either not in inference mode or no coarser unit available
                     attrname = npy_unit_to_attrname[creso]
                     raise OutOfBoundsDatetime(
                         f"Out of bounds {attrname} timestamp: {val}"
@@ -580,6 +547,20 @@ cdef _array_strptime_impl(
             try:
                 iresult[i] = npy_datetimestruct_to_datetime(creso, &dts)
             except OverflowError as err:
+                if infer_reso:
+                    # During inference, try falling back to coarser unit
+                    next_creso = get_next_coarser_unit(creso)
+                    if next_creso != NPY_DATETIMEUNIT.NPY_FR_GENERIC:
+                        # Retry with coarser unit
+                        return array_strptime(
+                            values,
+                            fmt=fmt,
+                            exact=exact,
+                            errors=errors,
+                            utc=utc,
+                            creso=next_creso,
+                        )
+                # Either not in inference mode or no coarser unit available
                 attrname = npy_unit_to_attrname[creso]
                 raise OutOfBoundsDatetime(
                     f"Out of bounds {attrname} timestamp: {val}"
@@ -628,7 +609,7 @@ cdef _array_strptime_impl(
         if state.creso_ever_changed:
             # We encountered mismatched resolutions, need to re-parse with
             #  the correct one.
-            return _array_strptime_impl(
+            return array_strptime(
                 values,
                 fmt=fmt,
                 exact=exact,

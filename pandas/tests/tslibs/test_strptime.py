@@ -108,30 +108,3 @@ class TestArrayStrptimeResolutionInference:
         fmt2 = "%b %d, %Y"
         res2, _ = array_strptime(vals2, fmt=fmt2, creso=creso_infer)
         tm.assert_numpy_array_equal(res2, expected2)
-
-    def test_array_strptime_fallback_to_us_explicit_ns(self):
-        # Test automatic fallback from explicit nanoseconds to microseconds
-        # When explicitly requesting ns resolution, year 2401 should fall back to us
-        from pandas._libs.tslibs.dtypes import NpyDatetimeUnit
-        creso_ns = NpyDatetimeUnit.NPY_FR_ns.value
-        
-        vals = np.array(["2401-09-15"], dtype=object)
-        fmt = "ISO8601"
-        res, _ = array_strptime(vals, fmt=fmt, creso=creso_ns)
-        assert res.dtype == np.dtype("M8[us]")
-        expected = np.array(["2401-09-15"], dtype="M8[us]")
-        tm.assert_numpy_array_equal(res, expected)
-
-    def test_array_strptime_fallback_mixed_explicit_ns(self):
-        # Test automatic fallback with explicit ns resolution
-        # When one value is in nano range and one is out, both should use coarser unit
-        from pandas._libs.tslibs.dtypes import NpyDatetimeUnit
-        creso_ns = NpyDatetimeUnit.NPY_FR_ns.value
-        
-        vals = np.array(["2020-01-01", "2401-09-15"], dtype=object)
-        fmt = "ISO8601"
-        res, _ = array_strptime(vals, fmt=fmt, creso=creso_ns)
-        # Both values should be in microseconds since one is out of nano range
-        assert res.dtype == np.dtype("M8[us]")
-        expected = np.array(["2020-01-01", "2401-09-15"], dtype="M8[us]")
-        tm.assert_numpy_array_equal(res, expected)
