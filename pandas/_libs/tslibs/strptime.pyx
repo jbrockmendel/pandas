@@ -89,6 +89,22 @@ from pandas._libs.tslibs.tzconversion cimport tz_localize_to_utc_single
 cnp.import_array()
 
 
+cdef NPY_DATETIMEUNIT get_next_coarser_unit(NPY_DATETIMEUNIT creso):
+    """
+    Get the next coarser unit in the sequence: ns -> us -> ms -> s
+    Returns NPY_FR_GENERIC if there is no coarser unit available.
+    """
+    if creso == NPY_DATETIMEUNIT.NPY_FR_ns:
+        return NPY_DATETIMEUNIT.NPY_FR_us
+    elif creso == NPY_DATETIMEUNIT.NPY_FR_us:
+        return NPY_DATETIMEUNIT.NPY_FR_ms
+    elif creso == NPY_DATETIMEUNIT.NPY_FR_ms:
+        return NPY_DATETIMEUNIT.NPY_FR_s
+    else:
+        # No coarser unit available
+        return NPY_DATETIMEUNIT.NPY_FR_GENERIC
+
+
 cdef bint format_is_iso(f: str):
     """
     Does format match the iso8601 set that can be handled by the C parser?
@@ -472,6 +488,20 @@ def array_strptime(
                 try:
                     value = npy_datetimestruct_to_datetime(creso, &dts)
                 except OverflowError as err:
+                    if infer_reso:
+                        # During inference, try falling back to coarser unit
+                        next_creso = get_next_coarser_unit(creso)
+                        if next_creso != NPY_DATETIMEUNIT.NPY_FR_GENERIC:
+                            # Retry with coarser unit
+                            return array_strptime(
+                                values,
+                                fmt=fmt,
+                                exact=exact,
+                                errors=errors,
+                                utc=utc,
+                                creso=next_creso,
+                            )
+                    # Either not in inference mode or no coarser unit available
                     attrname = npy_unit_to_attrname[creso]
                     raise OutOfBoundsDatetime(
                         f"Out of bounds {attrname} timestamp: {val}"
@@ -517,6 +547,20 @@ def array_strptime(
             try:
                 iresult[i] = npy_datetimestruct_to_datetime(creso, &dts)
             except OverflowError as err:
+                if infer_reso:
+                    # During inference, try falling back to coarser unit
+                    next_creso = get_next_coarser_unit(creso)
+                    if next_creso != NPY_DATETIMEUNIT.NPY_FR_GENERIC:
+                        # Retry with coarser unit
+                        return array_strptime(
+                            values,
+                            fmt=fmt,
+                            exact=exact,
+                            errors=errors,
+                            utc=utc,
+                            creso=next_creso,
+                        )
+                # Either not in inference mode or no coarser unit available
                 attrname = npy_unit_to_attrname[creso]
                 raise OutOfBoundsDatetime(
                     f"Out of bounds {attrname} timestamp: {val}"
