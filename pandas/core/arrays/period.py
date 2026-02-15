@@ -27,7 +27,7 @@ from pandas._libs.tslibs import (
     Timedelta,
     add_overflowsafe,
     astype_overflowsafe,
-    dt64arr_to_periodarr as c_dt64arr_to_periodarr,
+    dt64arr_to_periodarr,
     get_unit_from_dtype,
     iNaT,
     parsing,
@@ -79,6 +79,7 @@ if TYPE_CHECKING:
         Callable,
         Sequence,
     )
+    from datetime import tzinfo
 
     from pandas._typing import (
         AnyArrayLike,
@@ -292,7 +293,7 @@ class PeriodArray(dtl.DatelikeOps, libperiod.PeriodMixin):  # type: ignore[misc]
         return cls._from_sequence(strings, dtype=dtype, copy=copy)
 
     @classmethod
-    def _from_datetime64(cls, data, freq, tz=None) -> Self:
+    def _from_datetime64(cls, data, freq, tz: tzinfo | None = None) -> Self:
         """
         Construct a PeriodArray from a datetime64 array
 
@@ -306,9 +307,26 @@ class PeriodArray(dtl.DatelikeOps, libperiod.PeriodMixin):  # type: ignore[misc]
         -------
         PeriodArray[freq]
         """
+        if not lib.is_np_dtype(data.dtype, "M"):
+            raise ValueError(f"Wrong dtype: {data.dtype}")
+
         if isinstance(freq, BaseOffset):
             freq = PeriodDtype(freq)._freqstr
-        data, freq = dt64arr_to_periodarr(data, freq, tz)
+
+        if freq is None:
+            if isinstance(data, ABCIndex):
+                data, freq = data._values, data.freq
+            elif isinstance(data, ABCSeries):
+                data, freq = data._values, data.dt.freq
+
+        elif isinstance(data, (ABCIndex, ABCSeries)):
+            data = data._values
+
+        reso = get_unit_from_dtype(data.dtype)
+        freq = Period._maybe_convert_freq(freq)
+        base = freq._period_dtype_code
+        data = dt64arr_to_periodarr(data.view("i8"), base, tz, reso=reso)
+
         dtype = PeriodDtype(freq)
         return cls(data, dtype=dtype)
 
@@ -1322,46 +1340,6 @@ def validate_dtype_freq(
         dtype = dtype2
 
     return dtype
-
-
-def dt64arr_to_periodarr(
-    data, freq, tz=None
-) -> tuple[npt.NDArray[np.int64], BaseOffset]:
-    """
-    Convert a datetime-like array to values Period ordinals.
-
-    Parameters
-    ----------
-    data : Union[Series[datetime64[ns]], DatetimeIndex, ndarray[datetime64ns]]
-    freq : Optional[Union[str, Tick]]
-        Must match the `freq` on the `data` if `data` is a DatetimeIndex
-        or Series.
-    tz : Optional[tzinfo]
-
-    Returns
-    -------
-    ordinals : ndarray[int64]
-    freq : Tick
-        The frequency extracted from the Series or DatetimeIndex if that's
-        used.
-
-    """
-    if not isinstance(data.dtype, np.dtype) or data.dtype.kind != "M":
-        raise ValueError(f"Wrong dtype: {data.dtype}")
-
-    if freq is None:
-        if isinstance(data, ABCIndex):
-            data, freq = data._values, data.freq
-        elif isinstance(data, ABCSeries):
-            data, freq = data._values, data.dt.freq
-
-    elif isinstance(data, (ABCIndex, ABCSeries)):
-        data = data._values
-
-    reso = get_unit_from_dtype(data.dtype)
-    freq = Period._maybe_convert_freq(freq)
-    base = freq._period_dtype_code
-    return c_dt64arr_to_periodarr(data.view("i8"), base, tz, reso=reso), freq
 
 
 def _get_ordinal_range(start, end, periods, freq, mult: int = 1):
