@@ -11305,8 +11305,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
             return the 25th, 50th, and 75th percentiles.
         include : 'all', list-like of dtypes or None (default), optional
             A white list of data types to include in the result. Ignored
-            for ``Series`` (deprecated; will be removed in a future
-            version). Here are the options:
+            for ``Series``. Here are the options:
 
             - 'all' : All columns of the input will be included in the output.
             - A list-like of dtypes : Limits the results to the
@@ -11318,10 +11317,14 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
               ``select_dtypes`` (e.g. ``df.describe(include=['O'])``). To
               select pandas categorical columns, use ``'category'``
             - None (default) : The result will include all numeric columns.
+
+            .. deprecated:: 3.1.0
+                Passing ``include`` to :meth:`Series.describe` is deprecated;
+                it has no effect on a Series and will be removed in a future
+                version.
         exclude : list-like of dtypes or None (default), optional,
             A black list of data types to omit from the result. Ignored
-            for ``Series`` (deprecated; will be removed in a future
-            version). Here are the options:
+            for ``Series``. Here are the options:
 
             - A list-like of dtypes : Excludes the provided data types
               from the result. To exclude numeric types submit
@@ -11330,6 +11333,11 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
               ``select_dtypes`` (e.g. ``df.describe(exclude=['O'])``). To
               exclude pandas categorical columns, use ``'category'``
             - None (default) : The result will exclude nothing.
+
+            .. deprecated:: 3.1.0
+                Passing ``exclude`` to :meth:`Series.describe` is deprecated;
+                it has no effect on a Series and will be removed in a future
+                version.
 
         Returns
         -------
@@ -11372,8 +11380,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
 
         The `include` and `exclude` parameters can be used to limit
         which columns in a ``DataFrame`` are analyzed for the output.
-        Passing them when analyzing a ``Series`` is deprecated and will
-        raise in a future version; the parameters are ignored today.
+        The parameters are ignored when analyzing a ``Series``.
 
         Examples
         --------
