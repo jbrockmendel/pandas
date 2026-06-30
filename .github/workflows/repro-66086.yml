@@ -1,0 +1,122 @@
+# Throwaway: test whether the np_datetime_strings.c include-order fix
+# (PY_ARRAY_UNIQUE_SYMBOL defined before <numpy/ndarraytypes.h>) lets a wheel
+# built against numpy 2.5.0 run on older numpy -- i.e. whether seberg's
+# include-order hypothesis (numpy/numpy#31804) fixes the segfault without pinning
+# the build numpy. Safe to delete.
+name: repro-66086
+
+on:
+  push:
+    branches:
+      - ci-repro-66086
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  abtest:
+    name: ${{ matrix.cfg.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both build against numpy 2.5.0 + a stable Cython (the only variable is
+        # whether the include-order fix is applied).
+        cfg:
+          - name: baseline (np2.5.0, no fix)
+            apply_fix: "no"
+          - name: strings-fix (np2.5.0, PY_ARRAY_UNIQUE_SYMBOL before ndarraytypes.h)
+            apply_fix: "yes"
+    env:
+      BUILD_NUMPY: "2.5.0"
+      BUILD_CYTHON: "Cython>3.1.0,<3.3"
+      RUNTIME_NUMPYS: "2.5.0 2.4.6 2.3.3"
+      STRINGS_C: pandas/_libs/src/vendored/numpy/datetime/np_datetime_strings.c
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Apply include-order fix (fix cell only)
+        if: ${{ matrix.cfg.apply_fix == 'yes' }}
+        run: |
+          python - "$STRINGS_C" <<'PY'
+          import sys
+          p = sys.argv[1]
+          s = open(p).read()
+          needle = "#include <numpy/ndarraytypes.h>"
+          assert needle in s, "anchor include not found in " + p
+          ins = "#define PY_ARRAY_UNIQUE_SYMBOL PANDAS_DATETIME_NUMPY\n"
+          assert "PY_ARRAY_UNIQUE_SYMBOL PANDAS_DATETIME_NUMPY" not in s, "already defined?"
+          s = s.replace(needle, ins + needle, 1)
+          open(p, "w").write(s)
+          print("applied include-order fix")
+          PY
+          echo "--- resulting header region ---"
+          grep -nE "NO_IMPORT|PY_ARRAY_UNIQUE_SYMBOL|#include <numpy" "$STRINGS_C" | head
+
+      - name: Write reproducers
+        run: |
+          cat > "$RUNNER_TEMP/repro.py" <<'PY'
+          import sys, pandas as pd
+          case = sys.argv[1]
+          if case == "66086":
+              print("66086 ->", repr(pd.Timedelta(days=28)))
+          elif case == "66083":
+              print("66083 ->", repr(pd.Timedelta(1, unit="D")))
+          elif case == "66089":
+              di = pd.date_range("2026-04-17 00:00", periods=24, freq="h")
+              print("66089 ->", di[0], "..", di[-1], "| freq=", di.freq)
+          elif case == "66085":
+              base = [f"2000-01-01T0{i % 9}:00:00.000" for i in range(50)]
+              vals = [base[i % len(base)] for i in range(3000)]
+              out = pd.to_datetime(pd.Series(vals))
+              print("66085 ->", out.iloc[0], "n=", len(out))
+          print("OK")
+          PY
+
+      - name: Build pandas wheel against numpy ${{ env.BUILD_NUMPY }}
+        run: |
+          python -m venv build_env
+          source build_env/bin/activate
+          pip install --upgrade pip
+          pip install "numpy==$BUILD_NUMPY" "$BUILD_CYTHON" \
+            "meson-python>=0.19.0,<1" "meson>=1.2.3,<2" ninja wheel "versioneer[toml]"
+          echo "=== build toolchain ==="
+          python -c "import numpy,Cython; print('numpy',numpy.__version__,'| Cython',Cython.__version__)"
+          pip wheel . --no-build-isolation --no-deps -w dist/
+          deactivate
+          ls -la dist/
+
+      - name: Run reproducers across runtime numpy versions
+        run: |
+          set +e
+          WHEEL=$(ls "$PWD"/dist/*.whl)
+          REPRO="$RUNNER_TEMP/repro.py"
+          echo "Built wheel: $WHEEL  (apply_fix=${{ matrix.cfg.apply_fix }}, build numpy $BUILD_NUMPY)"
+          cd "$RUNNER_TEMP"
+          for RT in $RUNTIME_NUMPYS; do
+            python -m venv "rt_$RT"
+            "./rt_$RT/bin/pip" install -q --upgrade pip >/dev/null 2>&1
+            "./rt_$RT/bin/pip" install -q "numpy==$RT" python-dateutil >/dev/null 2>&1
+            "./rt_$RT/bin/pip" install -q --no-deps "$WHEEL" >/dev/null 2>&1
+            echo "================================================================"
+            echo ">>> runtime numpy $RT"
+            imp=$("./rt_$RT/bin/python" -c "import numpy,pandas; print('import OK -> pandas', pandas.__version__, '| numpy', numpy.__version__)" 2>&1)
+            echo "  $imp"
+            for C in 66086 66083 66089 66085; do
+              out=$("./rt_$RT/bin/python" -X faulthandler "$REPRO" "$C" 2>&1)
+              rc=$?
+              if [ "$rc" -eq 0 ]; then
+                echo "  case $C: OK     $(printf '%s' "$out" | grep -E ' -> ' | head -1)"
+              else
+                tag=""; [ "$rc" -eq 139 ] && tag="(SIGSEGV)"
+                echo "  case $C: FAIL exit=$rc $tag"
+                printf '%s\n' "$out" | sed 's/^/        /'
+              fi
+            done
+            echo
+          done
+          exit 0
