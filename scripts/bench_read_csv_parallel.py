@@ -139,12 +139,19 @@ def _peak_rss_mb() -> float | None:
                 ("PeakPagefileUsage", ctypes.c_size_t),
             ]
 
+        get_proc = ctypes.windll.kernel32.GetCurrentProcess
+        get_proc.restype = wintypes.HANDLE
+        get_info = ctypes.windll.psapi.GetProcessMemoryInfo
+        get_info.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(_PMC),
+            wintypes.DWORD,
+        ]
+        get_info.restype = wintypes.BOOL
+
         counters = _PMC()
         counters.cb = ctypes.sizeof(_PMC)
-        handle = ctypes.windll.kernel32.GetCurrentProcess()
-        if ctypes.windll.psapi.GetProcessMemoryInfo(
-            handle, ctypes.byref(counters), counters.cb
-        ):
+        if get_info(get_proc(), ctypes.byref(counters), counters.cb):
             return counters.PeakWorkingSetSize / 1024 / 1024
         return None
     try:
