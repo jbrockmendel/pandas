@@ -109,3 +109,47 @@ jobs:
             bench-stdout.txt
             bench-oom.json
             bench-oom-stdout.txt
+
+  # Same 4-vCPU runner class as windows-2025, different OS: tells us whether the
+  # large-file (>1GB) parallel regression is Windows-specific or a shared cloud-VM
+  # memory-bandwidth property that the already-shipping non-Windows default has too.
+  bench-linux:
+    name: Linux parallel read_csv bench (4-vCPU comparison)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up pixi env
+        uses: ./.github/actions/setup-pixi
+        with:
+          environment: py313
+
+      - name: Build pandas (editable)
+        run: pixi run --environment py313 build-pandas --editable
+
+      - name: Report CPU
+        run: pixi run --environment py313 python -c "import os; print('cpu_count', os.cpu_count())"
+
+      - name: Run bench + OOM probe
+        run: |
+          pixi run --environment py313 python scripts/bench_read_csv_parallel.py \
+            --fixtures ints,floats,strings,mixed --threads 1,2,4 --reps 9 \
+            --out bench-results.json | tee bench-stdout.txt
+          pixi run --environment py313 python scripts/bench_read_csv_parallel.py \
+            --fixtures ints --threads 1,2,4,8,12 --reps 3 --rows 15000000 \
+            --out bench-oom.json | tee bench-oom-stdout.txt
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: bench-results-linux
+          path: |
+            bench-results.json
+            bench-stdout.txt
+            bench-oom.json
+            bench-oom-stdout.txt
