@@ -1,0 +1,99 @@
+name: Bench read_csv parallel (Windows)
+
+# Investigation harness for enabling parallel read_csv on Windows (GH#64347).
+# Builds pandas editable on a Windows runner and sweeps the parallel thread
+# count so we can tell whether the T=2 slowdown reproduces and whether a code
+# change removes it.  Triggers on push to the investigation branch(es); also
+# dispatchable with custom fixtures/threads/rows.
+on:
+  push:
+    branches:
+      - perf-read_csv-windows
+      - perf-read_csv-windows-*
+  workflow_dispatch:
+    inputs:
+      fixtures:
+        description: "comma-separated fixtures (ints,floats,strings,mixed)"
+        default: "ints,floats,strings,mixed"
+      threads:
+        description: "comma-separated thread counts"
+        default: "1,2,4"
+      reps:
+        description: "timed reps per config"
+        default: "9"
+      rows:
+        description: "override rows per fixture (blank = default ~100MB sizes)"
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: bench-read-csv-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    name: Windows parallel read_csv bench
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up pixi env
+        uses: ./.github/actions/setup-pixi
+        with:
+          environment: py313
+
+      - name: Remove link.EXE for Windows
+        # Git's link.exe shadows MSVC's linker on PATH and breaks the build.
+        # https://github.com/Quansight-Labs/uarray/pull/310#issuecomment-3872989816
+        shell: bash
+        run: rm /c/Program\ Files/Git/usr/bin/link.EXE
+
+      - name: Build pandas (editable)
+        shell: bash
+        run: pixi run --environment py313 build-pandas --editable '-Csetup-args=--vsenv'
+
+      - name: Report CPU / RAM
+        shell: bash
+        run: |
+          echo "NUMBER_OF_PROCESSORS=$NUMBER_OF_PROCESSORS"
+          pixi run --environment py313 python -c "import os; print('cpu_count', os.cpu_count())"
+          wmic ComputerSystem get TotalPhysicalMemory 2>/dev/null || true
+
+      - name: Run bench
+        shell: bash
+        run: |
+          FIX="${{ github.event.inputs.fixtures || 'ints,floats,strings,mixed' }}"
+          THR="${{ github.event.inputs.threads || '1,2,4' }}"
+          REPS="${{ github.event.inputs.reps || '9' }}"
+          ROWS_ARG=""
+          if [ -n "${{ github.event.inputs.rows }}" ]; then
+            ROWS_ARG="--rows ${{ github.event.inputs.rows }}"
+          fi
+          pixi run --environment py313 python scripts/bench_read_csv_parallel.py \
+            --fixtures "$FIX" --threads "$THR" --reps "$REPS" $ROWS_ARG \
+            --out bench-results.json | tee bench-stdout.txt
+
+      - name: Write step summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## read_csv parallel bench (Windows)'
+            echo '```'
+            sed -n '/SPEEDUP vs T=1/,/T=1 column shows/p' bench-stdout.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: bench-results
+          path: |
+            bench-results.json
+            bench-stdout.txt
