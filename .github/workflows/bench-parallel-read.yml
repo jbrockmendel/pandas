@@ -1,18 +1,26 @@
 name: Bench parallel read_csv
 
 on:
+  # This workflow lives only on the scratch branch, so workflow_dispatch
+  # cannot resolve it by filename; push is what actually starts a run.
+  push:
+    branches: [bench-ci-parallel-read]
   workflow_dispatch:
     inputs:
       base_sha:
         description: "Baseline commit (merge-base of the PR branch)"
-        required: true
-        default: "b108e252ae6b89cbde809956befae361c6b7d906"
+        required: false
       head_sha:
         description: "PR branch commit"
-        required: true
-        default: "53d16be3a98986919a4c2c64e95dd7c0194ba375"
+        required: false
 
 permissions: {}
+
+env:
+  # merge-base of the PR branch
+  DEFAULT_BASE_SHA: b108e252ae6b89cbde809956befae361c6b7d906
+  # PR branch tip
+  DEFAULT_HEAD_SHA: 53d16be3a98986919a4c2c64e95dd7c0194ba375
 
 jobs:
   bench:
@@ -42,7 +50,13 @@ jobs:
 
       - name: Check out the ref under test
         run: |
-          SHA="${{ matrix.ref == 'base' && inputs.base_sha || inputs.head_sha }}"
+          if [ "${{ matrix.ref }}" = "base" ]; then
+            SHA="${{ inputs.base_sha || '' }}"
+            SHA="${SHA:-$DEFAULT_BASE_SHA}"
+          else
+            SHA="${{ inputs.head_sha || '' }}"
+            SHA="${SHA:-$DEFAULT_HEAD_SHA}"
+          fi
           git checkout --force "$SHA"
           git log -1 --format='%H %s'
           echo "PANDAS_SHA=$SHA" >> "$GITHUB_ENV"
