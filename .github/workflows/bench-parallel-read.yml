@@ -1,0 +1,89 @@
+name: Bench parallel read_csv
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: "Baseline commit (merge-base of the PR branch)"
+        required: true
+        default: "b108e252ae6b89cbde809956befae361c6b7d906"
+      head_sha:
+        description: "PR branch commit"
+        required: true
+        default: "53d16be3a98986919a4c2c64e95dd7c0194ba375"
+
+permissions: {}
+
+jobs:
+  bench:
+    permissions:
+      contents: read
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+        ref: [base, head]
+    runs-on: ${{ matrix.os }}
+    name: ${{ format('{0} {1}', matrix.os, matrix.ref) }}
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Stash the benchmark script outside the work tree
+        run: cp ci/bench_parallel_read.py "$RUNNER_TEMP/bench.py"
+
+      - name: Check out the ref under test
+        run: |
+          SHA="${{ matrix.ref == 'base' && inputs.base_sha || inputs.head_sha }}"
+          git checkout --force "$SHA"
+          git log -1 --format='%H %s'
+          echo "PANDAS_SHA=$SHA" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install build and runtime dependencies
+        run: |
+          python -m pip install -U pip wheel
+          python -m pip install "meson-python>=0.19.0,<1" "meson>=1.2.3,<2" \
+            "Cython>3.1.0,<4" "numpy>=2.0.0,!=2.5.0" "versioneer[toml]"
+          python -m pip install python-dateutil tzdata pyarrow pytest hypothesis
+
+      - name: Remove link.EXE for Windows
+        # Git bash's link.EXE shadows the MSVC linker meson needs.
+        if: ${{ matrix.os == 'windows-2025' }}
+        run: rm -f "/c/Program Files/Git/usr/bin/link.EXE"
+
+      - name: Build pandas
+        run: |
+          if [ "${{ matrix.os }}" = "windows-2025" ]; then
+            python -m pip install -e . --no-build-isolation -Csetup-args="--vsenv"
+          else
+            python -m pip install -e . --no-build-isolation
+          fi
+          python -c "import pandas; print(pandas.__version__)"
+
+      - name: Parallel-read correctness tests
+        continue-on-error: true
+        run: python -m pytest pandas/tests/io/parser/test_parallel_read.py -q
+
+      - name: Benchmark
+        run: |
+          python "$RUNNER_TEMP/bench.py" "$RUNNER_TEMP/data" \
+            "$RUNNER_TEMP/result.json" "${{ matrix.os }}-${{ matrix.ref }}"
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ matrix.os }}-${{ matrix.ref }}
+          path: ${{ runner.temp }}/result.json
