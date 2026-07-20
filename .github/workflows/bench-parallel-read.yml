@@ -48,6 +48,15 @@ jobs:
       - name: Stash the benchmark script outside the work tree
         run: cp ci/bench_parallel_read.py "$RUNNER_TEMP/bench.py"
 
+      - name: Fetch upstream tags
+        # The fork has no release tags, so versioneer describes the build as
+        # 0.21.0.dev.  pyarrow's pandas shim then refuses to interoperate
+        # ("pandas too old"), which silently drops string columns off the
+        # pyarrow-backed path and breaks conftest import.
+        run: |
+          git fetch --tags --quiet https://github.com/pandas-dev/pandas.git
+          echo "nearest tag: $(git describe --tags --abbrev=0 HEAD)"
+
       - name: Check out the ref under test
         run: |
           if [ "${{ matrix.ref }}" = "base" ]; then

@@ -154,9 +154,17 @@ def main():
     import pandas as pd
     import pandas._testing as tm
 
+    try:
+        import pyarrow
+
+        pyarrow_version = pyarrow.__version__
+    except ImportError:
+        pyarrow_version = None
+
     report: dict = {
         "label": label,
         "pandas_version": pd.__version__,
+        "pyarrow_version": pyarrow_version,
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "cpu_model": cpu_model(),
@@ -183,6 +191,9 @@ def main():
                 parallel_frame = pd.read_csv(path)
             tm.assert_frame_equal(serial_frame, parallel_frame)
             entry["parallel_equals_serial"] = True
+            # Which dtypes the read actually produced: proof that both refs
+            # resolved string columns the same way (pyarrow-backed or not).
+            entry["dtypes"] = sorted({str(dt) for dt in serial_frame.dtypes})
             del serial_frame, parallel_frame
         except AssertionError as err:
             entry["parallel_equals_serial"] = False
