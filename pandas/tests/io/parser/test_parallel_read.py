@@ -42,6 +42,7 @@ import pandas._testing as tm
 from pandas.io.parsers import readers as _readers
 from pandas.io.parsers.base_parser import ParserBase
 from pandas.io.parsers.readers import (
+    _PARALLEL_MAX_COLUMN_PIECES,
     _can_parallelize_csv,
     _default_n_workers,
     _find_chunk_byte_offsets,
@@ -606,6 +607,10 @@ class TestReadCsvParallel:
             return _find_chunk_byte_offsets(filepath, n_chunks, data_start)
 
         monkeypatch.setattr("pandas.io.parsers.readers._find_chunk_byte_offsets", spy)
+        # The fixture is a few hundred KB, well under the chunk byte floor that
+        # sizes a real read's split.  This test is about the row estimate, so
+        # take that floor out of the way.
+        monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_MIN_CHUNK_BYTES", 1)
         kwds = self._base_kwds(path)
         result = _read_csv_parallel(str(path), kwds, 4)
         assert result is not None
@@ -1066,6 +1071,9 @@ def test_parallel_long_line_keeps_the_split(tmp_path, monkeypatch):
         return offsets
 
     monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_READ_MIN_BYTES", 1)
+    # As with the size gate above, the ~100 KB fixture is far under the chunk
+    # byte floor; this test is about boundaries surviving a long line.
+    monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_MIN_CHUNK_BYTES", 1)
     monkeypatch.setattr("pandas.io.parsers.readers._find_chunk_byte_offsets", spy)
 
     with option_context("mode.max_threads", 1):
@@ -1077,6 +1085,112 @@ def test_parallel_long_line_keeps_the_split(tmp_path, monkeypatch):
     # first leaves 2 chunks no matter how many workers were asked for.
     assert chunk_counts, "the parallel path did not run"
     assert chunk_counts[0] >= 3
+
+
+@pytest.mark.skipif(WASM, reason="WASM cannot spawn threads, so no split happens")
+def test_parallel_wide_frame_chunk_count_ignores_worker_count(tmp_path, monkeypatch):
+    # The gather plans one piece per (column, chunk), so a chunk count taken
+    # from the worker count alone makes a wide frame slower the more workers
+    # it is given.  The split must be bounded by the column count instead.
+    ncols = 100
+    path = tmp_path / "wide.csv"
+    header = ",".join(f"c{i}" for i in range(ncols)) + "\n"
+    row = ",".join(str(i % 10) for i in range(ncols)) + "\n"
+    path.write_text(header + row * 20_000, encoding="utf-8")
+
+    n_targets = []
+
+    def spy(filepath, n_chunks, data_start):
+        n_targets.append(n_chunks)
+        return _find_chunk_byte_offsets(filepath, n_chunks, data_start)
+
+    monkeypatch.setattr("pandas.io.parsers.readers._find_chunk_byte_offsets", spy)
+    # Isolate the column-piece budget from the row and byte floors.
+    monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_READ_MIN_BYTES", 1)
+    monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_MIN_CHUNK_ROWS", 1)
+    monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_MIN_CHUNK_BYTES", 1)
+
+    budget = _PARALLEL_MAX_COLUMN_PIECES // ncols
+    with option_context("mode.max_threads", 1):
+        expected = read_csv(path)
+    # At 4 workers the 4*3 oversubscription is still under the budget, so it
+    # drives the split; at 32 it would ask for 96 chunks and the budget binds.
+    # 32 rather than 16 keeps the budget clear of the even-split snap below.
+    for workers, want_chunks in ((4, 12), (32, budget)):
+        n_targets.clear()
+        with option_context("mode.max_threads", workers):
+            result = read_csv(path)
+        tm.assert_frame_equal(result, expected)
+        assert n_targets, "the parallel path did not run"
+        assert n_targets[0] == want_chunks
+
+
+@pytest.mark.skipif(WASM, reason="WASM cannot spawn threads, so no split happens")
+def test_parallel_small_file_chunk_count_follows_size(tmp_path, monkeypatch):
+    # A file only just over the size gate has nothing to amortise per-chunk
+    # costs against, so its split must follow its size rather than the core
+    # count -- which in turn caps the workers, since spare threads only find
+    # the queue empty.
+    path = tmp_path / "small.csv"
+    body = "".join(f"{i},{i + 1},{i + 2}\n" for i in range(20_000))
+    path.write_text("a,b,c\n" + body, encoding="utf-8")
+    data_size = os.path.getsize(path) - len("a,b,c\n")
+
+    n_targets = []
+
+    def spy(filepath, n_chunks, data_start):
+        n_targets.append(n_chunks)
+        return _find_chunk_byte_offsets(filepath, n_chunks, data_start)
+
+    monkeypatch.setattr("pandas.io.parsers.readers._find_chunk_byte_offsets", spy)
+    monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_READ_MIN_BYTES", 1)
+    monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_MIN_CHUNK_ROWS", 1)
+    chunk_bytes = 64 * 1024
+    monkeypatch.setattr(
+        "pandas.io.parsers.readers._PARALLEL_MIN_CHUNK_BYTES", chunk_bytes
+    )
+
+    with option_context("mode.max_threads", 1):
+        expected = read_csv(path)
+    with option_context("mode.max_threads", 64):
+        result = read_csv(path)
+    tm.assert_frame_equal(result, expected)
+    assert n_targets, "the parallel path did not run"
+    assert n_targets[0] == data_size // chunk_bytes
+
+
+@pytest.mark.skipif(WASM, reason="WASM cannot spawn threads, so no split happens")
+def test_parallel_chunk_count_snaps_to_an_even_split(tmp_path, monkeypatch):
+    # A count between one and two chunks per worker leaves one worker parsing a
+    # second chunk while the others idle, so the read costs two chunks' time
+    # however it is split -- and fewer chunks make each of those two bigger.
+    # The count must drop to one chunk per worker instead.
+    path = tmp_path / "small.csv"
+    body = "".join(f"{i},{i + 1},{i + 2}\n" for i in range(20_000))
+    path.write_text("a,b,c\n" + body, encoding="utf-8")
+    data_size = os.path.getsize(path) - len("a,b,c\n")
+
+    n_targets = []
+
+    def spy(filepath, n_chunks, data_start):
+        n_targets.append(n_chunks)
+        return _find_chunk_byte_offsets(filepath, n_chunks, data_start)
+
+    monkeypatch.setattr("pandas.io.parsers.readers._find_chunk_byte_offsets", spy)
+    monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_READ_MIN_BYTES", 1)
+    monkeypatch.setattr("pandas.io.parsers.readers._PARALLEL_MIN_CHUNK_ROWS", 1)
+    # Size the byte floor so it asks for 5 chunks -- between 4 workers and 8.
+    monkeypatch.setattr(
+        "pandas.io.parsers.readers._PARALLEL_MIN_CHUNK_BYTES", data_size // 5
+    )
+
+    with option_context("mode.max_threads", 1):
+        expected = read_csv(path)
+    with option_context("mode.max_threads", 4):
+        result = read_csv(path)
+    tm.assert_frame_equal(result, expected)
+    assert n_targets, "the parallel path did not run"
+    assert n_targets[0] == 4
 
 
 def test_parallel_mixed_dtype_column_matches_serial(tmp_path, monkeypatch):

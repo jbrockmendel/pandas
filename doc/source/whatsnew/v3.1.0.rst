@@ -328,6 +328,7 @@ Performance improvements
 - Performance improvement in :func:`read_csv` with ``engine="c"`` when parsing float columns (:issue:`66457`)
 - Performance improvement in :func:`read_csv` with ``engine="c"`` when parsing integer columns (:issue:`65347`, :issue:`66459`, :issue:`66487`)
 - Performance improvement in :func:`read_csv` with ``engine="c"`` when reading from binary file-like objects (e.g. PyArrow S3 file handles) by avoiding unnecessary ``TextIOWrapper`` wrapping (:issue:`46823`)
+- Performance improvement in :func:`read_csv` with ``engine="c"`` when reading in parallel on a machine with many cores: frames with many columns, and files only a little larger than the size at which parallel reading starts, previously got slower as the worker count rose and are now faster (:issue:`66152`)
 - Performance improvement in :func:`read_csv` with ``engine="c"`` when reading in parallel: closing a parser no longer blocks the other parser threads while its buffers are freed (:issue:`66272`)
 - Performance improvement in :func:`read_csv` with ``engine="c"``, especially for large files and parallel reads (:issue:`66271`)
 - Performance improvement in :func:`read_csv` with ``engine="c"``, most visibly for integer columns, wide frames, and parallel reads (:issue:`66276`)

@@ -202,6 +202,26 @@ _python_unsupported = {"low_memory", "float_precision"}
 _PARALLEL_READ_MIN_BYTES = 5 * 1024 * 1024  # 5 MB
 # Minimum rows per parallel chunk, bounding how finely a file is split.
 _PARALLEL_MIN_CHUNK_ROWS = 2000
+# Minimum bytes per parallel chunk.  The row floor above is not enough on its
+# own: 2000 rows of a narrow file is a couple of hundred KB, so a file just
+# over the size gate splits into dozens of chunks whose per-chunk costs dwarf
+# the parse.  A file's chunk count should follow its size, not the core count.
+_PARALLEL_MIN_CHUNK_BYTES = 1024 * 1024  # 1 MB
+# Ceiling on total (column x chunk) pieces a split may create.  Every chunk
+# repeats a per-column cost in its worker -- a GIL-held array allocation and
+# dtype inference -- and leaves one more slice for the gather to copy, so on a
+# wide frame the cost of splitting grows with n_columns * n_chunks while the
+# parse it parallelises does not.  On a 100-column frame at 12 workers, going
+# from 12 to 36 chunks costs ~15 ms in the workers and ~10 ms in the gather
+# copies while total CPU *falls*: the extra threads block rather than work.
+# Dividing a fixed budget by the column count keeps a
+# wide frame from being split as finely as a narrow one.  Both the shape and
+# the constant are empirical: measured optimal chunk counts fall off more
+# slowly than 1/n_columns (36 chunks at 10 columns, 12-18 at 100, 6 at 400), so
+# this over-thins the widest frames, but it beats an uncapped split at every
+# width measured and stays within ~20% of the per-width optimum from 10 to 400
+# columns.
+_PARALLEL_MAX_COLUMN_PIECES = 1800
 
 # Ceiling on the *default* parallel-read worker count: parallel CSV reading
 # sees diminishing returns beyond a handful of workers, and a low default
@@ -716,8 +736,10 @@ def _read_csv_parallel(
     GH#66259
 
     The file's data section (everything after the header / skiprows preamble)
-    is split into up to *n_workers* byte-range chunks aligned to newline
-    boundaries.  Each chunk is parsed by an independent
+    is split into byte-range chunks aligned to newline boundaries, sized from
+    the file's rows, bytes and column count rather than from *n_workers*
+    alone; a file that yields fewer chunks than workers uses fewer workers.
+    Each chunk is parsed by an independent
     :class:`TextFileReader` / C-engine instance.  Because the hot paths in
     ``pandas/_libs/parsers.pyx`` (tokenisation, int/float/bool conversion)
     are wrapped in ``with nogil:`` blocks, threads achieve real CPU-level
@@ -772,38 +794,6 @@ def _read_csv_chunks(
 
     # Byte offset at which real data rows begin.
     data_start = _find_data_start_offset(filepath, header, skiprows)
-
-    # Oversubscribe the workers so one slow chunk cannot strand a core, but
-    # cap the count: every chunk repeats a per-column cost, which on a wide
-    # frame outweighs the parse it parallelises.  Take the median of sampled
-    # line lengths - a single probe lets one atypical line skew the estimate.
-    data_size = os.path.getsize(filepath) - data_start
-    line_lens = []
-    with open(filepath, "rb") as fh:
-        for probe in range(9):
-            fh.seek(data_start + data_size * probe // 9)
-            fh.readline(1 << 20)  # advance past the partial line at the probe
-            line = fh.readline(1 << 20)
-            if line:
-                line_lens.append(len(line))
-    line_lens.sort()
-    bytes_per_row = line_lens[len(line_lens) // 2] if line_lens else data_size
-    est_rows = data_size // bytes_per_row
-    n_target = min(n_workers * 3, est_rows // _PARALLEL_MIN_CHUNK_ROWS)
-    if n_target < 2:
-        # Too few rows to split, unless each half is big enough to amortise
-        # the per-column costs anyway.
-        if data_size < 2 * _PARALLEL_READ_MIN_BYTES:
-            return None
-        n_target = 2
-
-    offsets = _find_chunk_byte_offsets(filepath, n_target, data_start)
-    n_chunks = len(offsets) - 1
-    if n_chunks < 2:
-        # e.g. a data section with no interior newlines (one giant line)
-        return None
-    # Spare threads would only spin up to find the queue empty.
-    n_workers = min(n_workers, n_chunks)
 
     # ------------------------------------------------------------------
     # Infer column names from the preamble + one data line (very fast).
@@ -889,6 +879,66 @@ def _read_csv_chunks(
             raw_reader.close()
         if len(set(raw_names)) != len(raw_names):
             return None
+
+    # ------------------------------------------------------------------
+    # Plan the split.  Oversubscribe the workers so one slow chunk cannot
+    # strand a core, then bound the chunk count three ways: by rows, by bytes,
+    # and by the (column x chunk) piece budget.  Only the first term scales
+    # with the worker count -- the per-chunk costs it multiplies do not shrink
+    # when workers are added, so an unbounded n_workers * 3 makes a wider
+    # worker count actively slower on wide frames and small files.  Take the
+    # median of sampled line lengths - a single probe lets one atypical line
+    # skew the estimate.
+    # ------------------------------------------------------------------
+    data_size = os.path.getsize(filepath) - data_start
+    line_lens = []
+    with open(filepath, "rb") as fh:
+        for probe in range(9):
+            fh.seek(data_start + data_size * probe // 9)
+            fh.readline(1 << 20)  # advance past the partial line at the probe
+            line = fh.readline(1 << 20)
+            if line:
+                line_lens.append(len(line))
+    line_lens.sort()
+    bytes_per_row = line_lens[len(line_lens) // 2] if line_lens else data_size
+    est_rows = data_size // bytes_per_row
+    n_target = min(n_workers * 3, est_rows // _PARALLEL_MIN_CHUNK_ROWS)
+    if n_target < 2:
+        # Too few rows to split, unless each half is big enough to amortise
+        # the per-column costs anyway.
+        if data_size < 2 * _PARALLEL_READ_MIN_BYTES:
+            return None
+        n_target = 2
+    # Thin the split where the per-chunk costs would outrun the parse it buys.
+    # These only ever reduce the count: whether to parallelise at all is
+    # _can_parallelize_csv's decision, so they floor at 2 rather than falling
+    # back to serial.
+    n_target = max(
+        2,
+        min(
+            n_target,
+            data_size // _PARALLEL_MIN_CHUNK_BYTES,
+            _PARALLEL_MAX_COLUMN_PIECES // max(len(col_names), 1),
+        ),
+    )
+    if n_workers < n_target < 2 * n_workers:
+        # Between one and two chunks per worker, one worker takes a second
+        # chunk while the rest go idle, so the read costs two chunks' time
+        # whatever the count is - and the fewer the chunks, the bigger each of
+        # those two is.  Levelling to one chunk per worker measured faster
+        # across this band; it assumes chunks cost alike, which is why it is
+        # confined to the band where idling, not imbalance, dominates.
+        n_target = n_workers
+
+    offsets = _find_chunk_byte_offsets(filepath, n_target, data_start)
+    n_chunks = len(offsets) - 1
+    if n_chunks < 2:
+        # e.g. a data section with no interior newlines (one giant line)
+        return None
+    # Spare threads would only spin up to find the queue empty.  This is also
+    # what drops the worker count on a small file, now that the chunk count
+    # follows the file's size rather than the core count.
+    n_workers = min(n_workers, n_chunks)
 
     # ------------------------------------------------------------------
     # Dispatch all chunks in parallel.  Each worker gets a zero-copy
