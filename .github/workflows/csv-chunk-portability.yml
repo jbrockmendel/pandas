@@ -44,35 +44,42 @@ on:
 permissions: {}
 
 jobs:
+  # The matrix is built here rather than gated with a job-level `if`, because
+  # the matrix context does not exist yet when a job condition is evaluated --
+  # a job `if` referencing matrix.* makes the whole workflow file invalid.
+  setup:
+    permissions: {}
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        shell: bash
+        # Extras: the GH#64347 Windows table compared 3.11 against 3.14 and
+        # found 3.14 uniformly slower, which was never explained.  arm64 adds
+        # a different allocator and memory model for free.
+        run: |
+          core='{"os":"ubuntu-24.04","python":"3.13"},{"os":"windows-2025","python":"3.13"}'
+          extra='{"os":"windows-2025","python":"3.11"},{"os":"windows-2025","python":"3.14"},{"os":"ubuntu-24.04-arm","python":"3.13"}'
+          if [ "$FULL_MATRIX" = "true" ]; then
+            echo "matrix={\"include\":[$core,$extra]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix={\"include\":[$core]}" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
+        env:
+          FULL_MATRIX: ${{ inputs.full_matrix }}
+
   portability:
+    needs: setup
     permissions:
       contents: read
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            python: '3.13'
-          - os: windows-2025
-            python: '3.13'
-          # Extras.  The GH#64347 Windows table compared 3.11 against 3.14 and
-          # found 3.14 uniformly slower, which was never explained.  arm64 adds
-          # a different allocator and memory model for free.
-          - os: windows-2025
-            python: '3.11'
-            extra: true
-          - os: windows-2025
-            python: '3.14'
-            extra: true
-          - os: ubuntu-24.04-arm
-            python: '3.13'
-            extra: true
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     name: ${{ matrix.os }} py${{ matrix.python }}
     runs-on: ${{ matrix.os }}
-    if: >-
-      ${{ !matrix.extra
-       || (github.event_name == 'workflow_dispatch' && inputs.full_matrix) }}
     defaults:
       run:
         shell: bash -eo pipefail {0}
