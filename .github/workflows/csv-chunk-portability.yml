@@ -1,0 +1,156 @@
+# Does the parallel-read_csv chunk-count calibration hold off macOS?
+#
+# Diagnostic workflow for perf-read_csv-chunk-count -- scratch branch only, never
+# for merging.  It answers what a 4-vCPU runner can actually answer: per-chunk
+# cost, how it scales with column count, and read-time memory.  It deliberately
+# does not attempt the 8-16 worker knee, which needs real cores (AWS).
+#
+# Only ONE build per target is needed, unlike the earlier bench-ci-parallel-read
+# workflow: the harness toggles the two caps in-process, so the A/B happens
+# inside a single interpreter rather than across two builds.  That is both
+# cheaper and much less noisy on a shared runner.
+#
+# Build setup follows bench-ci-parallel-read, which learned these the hard way:
+# the upstream tag fetch, the Git-bash link.EXE shadowing, and --vsenv.  MSVC is
+# deliberate -- the repo's pixi path builds Windows with MinGW, which is not what
+# ships, and this is a question about shipped performance.
+name: CSV chunk-count portability
+
+on:
+  # The workflow lives only on this scratch branch, so workflow_dispatch cannot
+  # resolve it by filename until it is on the default branch; push starts a run.
+  push:
+    branches: [bench-csv-chunk-portability]
+  workflow_dispatch:
+    inputs:
+      fixture_mb:
+        description: 'Size of the wide/narrow fixture pair, in MB'
+        required: false
+        default: '48'
+      rounds:
+        description: 'Measurement rounds (best-of across rounds)'
+        required: false
+        default: '5'
+      reps:
+        description: 'Reads per round; best wins'
+        required: false
+        default: '3'
+      full_matrix:
+        description: 'Also run Windows py311/py314 and Linux arm64'
+        type: boolean
+        required: false
+        default: false
+
+permissions: {}
+
+jobs:
+  portability:
+    permissions:
+      contents: read
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: '3.13'
+          - os: windows-2025
+            python: '3.13'
+          # Extras.  The GH#64347 Windows table compared 3.11 against 3.14 and
+          # found 3.14 uniformly slower, which was never explained.  arm64 adds
+          # a different allocator and memory model for free.
+          - os: windows-2025
+            python: '3.11'
+            extra: true
+          - os: windows-2025
+            python: '3.14'
+            extra: true
+          - os: ubuntu-24.04-arm
+            python: '3.13'
+            extra: true
+    name: ${{ matrix.os }} py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    if: >-
+      ${{ !matrix.extra
+       || (github.event_name == 'workflow_dispatch' && inputs.full_matrix) }}
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch upstream tags
+        # The fork has no release tags, so versioneer describes the build as
+        # 0.21.0.dev.  pyarrow's pandas shim then refuses to interoperate
+        # ("pandas too old") and SILENTLY drops string columns off the
+        # pyarrow-backed path -- which would quietly corrupt the mixed-dtype
+        # fixture this harness uses.  Learned on bench-ci-parallel-read.
+        run: |
+          git fetch --tags --quiet https://github.com/pandas-dev/pandas.git
+          echo "nearest tag: $(git describe --tags --abbrev=0 HEAD)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install build and runtime dependencies
+        run: |
+          python -m pip install -U pip wheel
+          python -m pip install "meson-python>=0.19.0,<1" "meson>=1.2.3,<2" \
+            "Cython>3.1.0,<4" "numpy>=2.0.0,!=2.5.0" "versioneer[toml]"
+          python -m pip install python-dateutil tzdata pyarrow pytest hypothesis
+
+      - name: Remove link.EXE for Windows
+        # Git bash's link.EXE shadows the MSVC linker meson needs.
+        if: ${{ startsWith(matrix.os, 'windows') }}
+        run: rm -f "/c/Program Files/Git/usr/bin/link.EXE"
+
+      - name: Build pandas
+        run: |
+          if [[ "${{ matrix.os }}" == windows* ]]; then
+            python -m pip install -e . --no-build-isolation -Csetup-args="--vsenv"
+          else
+            python -m pip install -e . --no-build-isolation
+          fi
+          python -c "import pandas; print(pandas.__version__, pandas.__file__)"
+
+      - name: Report CPU topology
+        # Every table's interpretation depends on how many cores the runner
+        # actually gave us, and that is not guaranteed to stay at 4.
+        run: |
+          python -c "import os, platform; print(platform.platform()); \
+            print('cpu_count', os.cpu_count()); \
+            print('affinity', getattr(os, 'sched_getaffinity', lambda p: 'n/a')(0))"
+
+      - name: Parallel-read correctness tests
+        # A build that cannot pass these makes every number below meaningless,
+        # but a single unrelated failure should not cost us the run.
+        continue-on-error: true
+        run: python -m pytest pandas/tests/io/parser/test_parallel_read.py -q
+
+      - name: Run portability harness
+        run: |
+          python asv_bench/csv_chunk_portability.py \
+            --fixture-mb "${FIXTURE_MB:-48}" \
+            --rounds "${ROUNDS:-5}" \
+            --reps "${REPS:-3}" \
+            --dir "$RUNNER_TEMP/fixtures" \
+            --json "$RUNNER_TEMP/results.json"
+        env:
+          FIXTURE_MB: ${{ inputs.fixture_mb }}
+          ROUNDS: ${{ inputs.rounds }}
+          REPS: ${{ inputs.reps }}
+
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.os }}-py${{ matrix.python }}
+          path: ${{ runner.temp }}/results.json
+          if-no-files-found: warn
