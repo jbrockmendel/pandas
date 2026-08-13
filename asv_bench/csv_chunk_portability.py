@@ -39,7 +39,13 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+
+try:
+    import psutil
+except ImportError:  # optional; see current_rss_bytes
+    psutil = None
 
 import numpy as np
 
@@ -92,6 +98,56 @@ def peak_rss_bytes() -> int:
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     # ru_maxrss is bytes on macOS and kilobytes on Linux.
     return int(peak) if sys.platform == "darwin" else int(peak) * 1024
+
+
+def current_rss_bytes() -> int:
+    """Resident set *right now*, or 0 where it cannot be read.
+
+    Deliberately not the high-water mark.  ``ru_maxrss`` is a peak that cannot
+    be reset, and importing pandas + pyarrow can peak higher than the read
+    being measured ever does -- on a CI runner the import mark was 505 MB and
+    a 48 MB read never moved it, reporting a flat zero for every chunk count.
+    """
+    if psutil is not None:
+        try:
+            return int(psutil.Process().memory_info().rss)
+        except Exception:
+            return 0
+    if sys.platform.startswith("linux"):
+        try:
+            with open("/proc/self/statm", encoding="ascii") as handle:
+                resident_pages = int(handle.read().split()[1])
+            return resident_pages * os.sysconf("SC_PAGE_SIZE")
+        except (OSError, IndexError, ValueError):
+            return 0
+    return 0
+
+
+class RssSampler:
+    """Poll resident set on a thread and keep the maximum seen."""
+
+    def __init__(self, interval: float = 0.001) -> None:
+        self.interval = interval
+        self.peak = 0
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self):
+        self.peak = current_rss_bytes()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            self.peak = max(self.peak, current_rss_bytes())
+            time.sleep(self.interval)
+
+    def __exit__(self, *exc) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        self.peak = max(self.peak, current_rss_bytes())
 
 
 def describe_environment() -> dict:
@@ -428,13 +484,24 @@ def probe_memory(path: str, count: int, workers: int) -> None:
     planner = Planner()
     planner.forced = count
     pd.set_option("mode.max_threads", workers)
-    baseline = peak_rss_bytes()
-    pd.read_csv(path)
+    sampled = current_rss_bytes() > 0
+    if sampled:
+        baseline = current_rss_bytes()
+        with RssSampler() as sampler:
+            pd.read_csv(path)
+        peak = sampler.peak
+    else:
+        # No current-RSS source: fall back to the process high-water mark, which
+        # is only meaningful when the read peaks above the import peak.
+        baseline = peak_rss_bytes()
+        pd.read_csv(path)
+        peak = peak_rss_bytes()
     print(
         json.dumps(
             {
-                "peak_mb": peak_rss_bytes() / 1024 / 1024,
+                "peak_mb": peak / 1024 / 1024,
                 "baseline_mb": baseline / 1024 / 1024,
+                "sampled": sampled,
                 "chunks": planner.requested[0] if planner.requested else None,
             }
         )
@@ -579,6 +646,34 @@ def report_worker_sweep(data) -> None:
 def report_memory(data) -> None:
     counts = data["counts"]
     results = data["results"]
+    measured = [entry for entry in results.values() if entry]
+    if measured and not any(
+        entry["peak_mb"] - entry["baseline_mb"] > 0 for entry in measured
+    ):
+        # A table of zeros reads as "no effect" when it means "not measured".
+        method = "sampled" if measured[0].get("sampled") else "peak high-water mark"
+        print_table(
+            "E4  memory growth during the read vs chunk count",
+            f"NOT MEASURED on this platform (method: {method}).  Every point\n"
+            "reported zero growth, which means the resident set never moved --\n"
+            "either the RSS source is unavailable, or the interpreter's import\n"
+            "peak already exceeds the read's.  Do not read this as 'the caps\n"
+            "cost no memory'; it is a failed measurement, not a null result.",
+            ["fixture", "chunks", "peak MB", "at start"],
+            [
+                [
+                    name,
+                    count,
+                    f"{results[name, count]['peak_mb']:.0f}",
+                    f"{results[name, count]['baseline_mb']:.0f}",
+                ]
+                for name in ("wide", "narrow")
+                for count in counts
+                if results.get((name, count))
+            ],
+        )
+        return
+
     rows = []
     for name in ("wide", "narrow"):
         base = results.get((name, counts[-1]))

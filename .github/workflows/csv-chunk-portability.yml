@@ -112,6 +112,9 @@ jobs:
           python -m pip install "meson-python>=0.19.0,<1" "meson>=1.2.3,<2" \
             "Cython>3.1.0,<4" "numpy>=2.0.0,!=2.5.0" "versioneer[toml]"
           python -m pip install python-dateutil tzdata pyarrow pytest hypothesis
+          # psutil gives a portable *current* RSS; without it E4 falls back
+          # to the process high-water mark, which the import peak swamps.
+          python -m pip install psutil || echo 'psutil unavailable; E4 degraded'
 
       - name: Remove link.EXE for Windows
         # Git bash's link.EXE shadows the MSVC linker meson needs.
