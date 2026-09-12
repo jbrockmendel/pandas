@@ -778,28 +778,30 @@ def test_select_dtypes_categorical_instance_exact():
     tm.assert_frame_equal(result, df[["ord_ab"]])
 
 
+@pytest.mark.parametrize("kwarg", ["include", "exclude"])
+def test_select_dtypes_categorical_ordered_no_categories_raises(kwarg):
+    # GH#40234: a spec giving ordered but no categories names no dtype a
+    # column can have; it used to select every categorical column
+    df = pd.DataFrame({"unord": pd.Categorical(["a", "b"]), "i": [1, 2]})
+    msg = "a CategoricalDtype spec giving 'ordered' must give categories too"
+    with pytest.raises(ValueError, match=msg):
+        df.select_dtypes(**{kwarg: pd.CategoricalDtype(ordered=True)})
+
+
 @pytest.mark.parametrize(
     "spec",
     [
+        pd.CategoricalDtype,
+        "category",
         pd.CategoricalDtype(),
+        # ordered=False is the constructor default, so this cannot be told
+        # apart from a bare CategoricalDtype()
         pd.CategoricalDtype(ordered=False),
-        pd.CategoricalDtype(ordered=True),
     ],
-    ids=["bare", "ordered_false", "ordered_true"],
 )
-@pytest.mark.parametrize("kwarg", ["include", "exclude"])
-def test_select_dtypes_categorical_no_categories_raises(spec, kwarg):
-    # GH#40234: no column has categories=None, so such an instance names no
-    # dtype -- including ordered=False, the constructor default
-    df = pd.DataFrame({"unord": pd.Categorical(["a", "b"]), "i": [1, 2]})
-    msg = "a CategoricalDtype spec must give categories"
-    with pytest.raises(ValueError, match=msg):
-        df.select_dtypes(**{kwarg: spec})
-
-
-@pytest.mark.parametrize("spec", [pd.CategoricalDtype, "category"])
 def test_select_dtypes_categorical_family(spec):
-    # GH#40234: the class and the "category" string select every categorical
+    # GH#40234: the class, the "category" string and an instance that gives
+    # no attribute all select every categorical column
     df = pd.DataFrame(
         {
             "unord": pd.Categorical(["a", "b"]),
@@ -1255,10 +1257,10 @@ def test_select_dtypes_interval_closed_matches_exact(spec):
     tm.assert_frame_equal(result, df[["int_right"]])
 
 
-@pytest.mark.parametrize("spec", ["interval", pd.IntervalDtype])
+@pytest.mark.parametrize("spec", ["interval", pd.IntervalDtype, pd.IntervalDtype()])
 def test_select_dtypes_interval_family(spec):
-    # GH#40234: the "interval" string and the IntervalDtype class select
-    # every interval column regardless of subtype or closed
+    # GH#40234: the "interval" string, the IntervalDtype class and an instance
+    # that gives neither subtype nor closed all select every interval column
     df = pd.DataFrame(
         {
             "int_right": pd.arrays.IntervalArray.from_breaks([0, 1, 2, 3]),
@@ -1291,7 +1293,6 @@ def _interval_unit_frame():
 @pytest.mark.parametrize(
     "spec, msg",
     [
-        (pd.IntervalDtype(), "e.g. pd.IntervalDtype('int64', 'left')"),
         (pd.IntervalDtype(closed="left"), "e.g. pd.IntervalDtype('int64', 'left')"),
         (pd.IntervalDtype(closed="right"), "e.g. pd.IntervalDtype('int64', 'right')"),
         ("interval[int64]", "e.g. 'interval[int64, right]'"),
@@ -1307,10 +1308,8 @@ def _interval_unit_frame():
 )
 @pytest.mark.parametrize("kwarg", ["include", "exclude"])
 def test_select_dtypes_partial_interval_raises(spec, msg, kwarg):
-    # GH#40234: an IntervalDtype instance names one exact dtype, so leaving
-    # any attribute open names no dtype a column can have. The example each
-    # message names keeps the closed the spec gave, so copying it back
-    # selects what the user asked for.
+    # GH#40234: an interval spec that gives one attribute names one exact
+    # dtype, so leaving another open names no dtype a column can have
     df = _interval_unit_frame()
     with pytest.raises(ValueError, match=re.escape(msg)):
         df.select_dtypes(**{kwarg: spec})

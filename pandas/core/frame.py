@@ -5461,8 +5461,9 @@ class DataFrame(NDFrame, OpsMixin):
             * If a datetime64/timedelta64 spec, or an interval spec's subtype,
               names a resolution no column can have, e.g. ``'datetime64[10s]'``
             * If an :class:`IntervalDtype` or :class:`CategoricalDtype` spec
-              leaves an attribute, or an interval subtype's resolution, unset,
-              e.g. ``pd.IntervalDtype('int64')`` or ``'interval[datetime64]'``
+              gives some of its attributes but not all, or leaves an interval
+              subtype's resolution unset, e.g. ``pd.IntervalDtype('int64')``
+              or ``'interval[datetime64]'``
         TypeError
             * If any kind of string dtype is passed in.
 
@@ -5482,13 +5483,11 @@ class DataFrame(NDFrame, OpsMixin):
         * A dtype instance (e.g. ``np.dtype("int32")`` or
           ``pd.CategoricalDtype(["a", "b"])``) selects only columns with
           exactly that dtype, whereas a class or string selects a family
-          of dtypes. An :class:`IntervalDtype` or :class:`CategoricalDtype`
-          instance must pin every attribute down: ``pd.CategoricalDtype()``
-          with no categories or ``pd.IntervalDtype("int64")`` with no
-          ``closed`` raises, since no column has such a dtype. Pass the
-          class or the bare string -- ``pd.CategoricalDtype`` or
-          ``"category"``, ``pd.IntervalDtype`` or ``"interval"`` -- to select
-          the whole family
+          of dtypes. A bare ``pd.CategoricalDtype()`` or
+          ``pd.IntervalDtype()`` names the family too, but an instance that
+          gives some of its attributes and not others raises, since no column
+          has such a dtype: ``pd.IntervalDtype("int64")`` leaves ``closed``
+          unset, ``pd.CategoricalDtype(ordered=True)`` the categories
         * To select datetimes, use ``np.datetime64``, ``'datetime'`` or
           ``'datetime64'``
         * To select timedeltas, use ``np.timedelta64``, ``'timedelta'`` or
@@ -5644,17 +5643,17 @@ class DataFrame(NDFrame, OpsMixin):
                     )
 
             def check_interval_spec(target: IntervalDtype) -> None:
-                # GH#40234: an interval spec selects one exact dtype, so
-                # every part must be pinned down: no column has a None subtype
-                # or ``closed``, nor a subtype without a resolution.
+                # GH#40234: a spec that gives any part of itself selects one
+                # exact dtype, so it has to give the rest too: no column has a
+                # None subtype or ``closed``, nor a subtype without a
+                # resolution. A bare IntervalDtype() does not reach here.
                 subtype = target.subtype
                 if subtype is None:
-                    closed = target.closed or "left"
                     raise ValueError(
-                        "an interval spec must give a subtype, e.g. "
-                        f"pd.IntervalDtype('int64', {closed!r}); pass "
-                        "pd.IntervalDtype or 'interval' to select every "
-                        "interval column"
+                        "an interval spec giving 'closed' must give a "
+                        "subtype too, e.g. pd.IntervalDtype('int64', "
+                        f"{target.closed!r}); pass pd.IntervalDtype or "
+                        "'interval' to select every interval column"
                     )
                 if lib.is_np_dtype(subtype, "mM"):
                     if is_unitless_datetimelike(subtype):
@@ -5728,18 +5727,29 @@ class DataFrame(NDFrame, OpsMixin):
                             "use 'str' or 'object' instead"
                         )
                     if isinstance(dtype, IntervalDtype):
+                        if dtype.subtype is None and dtype.closed is None:
+                            # a spec that gives no attribute names the family,
+                            # as the class and the "interval" string do
+                            resolved.add(IntervalDtype)
+                            klasses.append(IntervalDtype)
+                            continue
                         check_interval_spec(dtype)
                     elif isinstance(dtype, CategoricalDtype) and (
                         dtype.categories is None
                     ):
-                        # GH#40234: no column has categories=None, and
-                        # ordered=False is the constructor default, so an
-                        # ordered=False spec cannot be read as "unordered only"
+                        if not dtype.ordered:
+                            # a spec giving no attribute names the family,
+                            # and ordered=False is the constructor default, so
+                            # it cannot be told apart from a bare instance
+                            resolved.add(CategoricalDtype)
+                            klasses.append(CategoricalDtype)
+                            continue
+                        # GH#40234: no column has categories=None
                         raise ValueError(
-                            "a CategoricalDtype spec must give categories, "
-                            "e.g. pd.CategoricalDtype(['a', 'b']); pass "
-                            "pd.CategoricalDtype or 'category' to select every "
-                            "categorical column"
+                            "a CategoricalDtype spec giving 'ordered' must give "
+                            "categories too, e.g. pd.CategoricalDtype(['a', "
+                            "'b'], ordered=True); pass pd.CategoricalDtype or "
+                            "'category' to select every categorical column"
                         )
                     if lib.is_np_dtype(dtype, "mM"):
                         if is_unitless_datetimelike(dtype):
