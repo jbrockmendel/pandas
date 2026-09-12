@@ -870,3 +870,22 @@ def test_frame_and_series_mean_all_na(arr, subtype):
     assert result.dtype.subtype == subtype
     assert pd.isna(result["a"])
     assert pd.isna(series_result)
+
+
+@pytest.mark.parametrize("op", ["sum", "any", "max"])
+def test_frame_reduction_axis_1_different_fill_values(op, performance_warning):
+    # GH#35795 the axis=1 path concatenates the columns, which read the second
+    #  column's gaps as the first column's fill_value
+    df = pd.DataFrame(
+        {
+            "a": SparseArray([0, 0, 1], fill_value=0),
+            "b": SparseArray([1, 0, 0], fill_value=1),
+        }
+    )
+
+    msg = "Concatenating sparse arrays with multiple fill values"
+    with tm.assert_produces_warning(performance_warning, match=msg):
+        result = getattr(df, op)(axis=1)
+
+    expected = getattr(df.sparse.to_dense(), op)(axis=1)
+    tm.assert_series_equal(result, expected)
