@@ -358,25 +358,36 @@ _BOOL_SPARSE_DTYPE_FALSE_FILL = SparseDtype(bool, False)
 _BOOL_SPARSE_DTYPE_TRUE_FILL = SparseDtype(bool, True)
 
 
+def _unbox_fill_value(dtype: np.dtype, fill_value):
+    """
+    ``fill_value`` as a numpy scalar, when ``dtype`` is the one numpy would mishandle.
+
+    ``np.result_type`` resolves a ``Timestamp``/``Timedelta`` to ``object``, and
+    ``np.full``/``np.insert`` route it through the stdlib datetime protocol and so
+    truncate it to microseconds.  An object dtype holds the pandas scalar as-is and
+    must not be unboxed.
+    """
+    if dtype.kind in "mM" and isinstance(fill_value, (Timestamp, Timedelta)):
+        return fill_value.asm8
+    return fill_value
+
+
 def _promote_for_fill(dtype: np.dtype, fill_value) -> tuple[np.dtype, Any]:
     """
     Dense dtype wide enough to hold ``fill_value``, and ``fill_value`` unboxed.
 
     ``maybe_promote`` is no good on its own: its datetime64 arm widens to ``M8[ns]``
     whenever the fill value's unit differs, so a ``Timestamp`` would pull a
-    ``Sparse[M8[s]]`` up to nanoseconds.  A ``Timestamp``/``Timedelta`` is unboxed
-    because ``np.full`` would otherwise truncate it to microseconds.
+    ``Sparse[M8[s]]`` up to nanoseconds.
     """
     dummy = ensure_wrapped_if_datetimelike(np.empty(0, dtype=dtype))
     if can_hold_element(dummy, fill_value):
-        if dtype.kind in "mM":
-            # an object dtype holds these as-is; only a datetimelike array needs
-            #  the numpy scalar, and only it rejects np.nan in place of NaT
-            if isna(fill_value):
-                # a unitless NaT is deprecated as of numpy 2.5
-                fill_value = dtype.type("NaT", np.datetime_data(dtype)[0])
-            elif isinstance(fill_value, (Timestamp, Timedelta)):
-                fill_value = fill_value.asm8
+        if dtype.kind in "mM" and isna(fill_value):
+            # only a datetimelike array rejects np.nan in place of NaT, and a
+            #  unitless NaT is deprecated as of numpy 2.5
+            fill_value = dtype.type("NaT", np.datetime_data(dtype)[0])
+        else:
+            fill_value = _unbox_fill_value(dtype, fill_value)
         return dtype, fill_value
     return maybe_promote(dtype, fill_value)
 
@@ -682,19 +693,12 @@ class SparseArray(OpsMixin, PandasObject, ExtensionArray):
                 "Unable to avoid copy while creating an array as requested."
             )
 
-        fill_value = self.fill_value
+        fill_value = _unbox_fill_value(self.sp_values.dtype, self.fill_value)
 
         if dtype is None:
             # Can NumPy represent this type?
             # If not, `np.result_type` will raise. We catch that
             # and return object.
-            if self.sp_values.dtype.kind == "M":
-                # However, we *do* special-case the common case of
-                # a datetime64 with pandas NaT.
-                if fill_value is NaT:
-                    # Can't put pd.NaT in a datetime64[ns]
-                    unit = np.datetime_data(self.sp_values.dtype)[0]
-                    fill_value = np.datetime64("NaT", unit)  # type: ignore[call-overload]
             try:
                 dtype = np.result_type(self.sp_values.dtype, type(fill_value))
             except TypeError:
@@ -1106,7 +1110,8 @@ class SparseArray(OpsMixin, PandasObject, ExtensionArray):
             # is not large, maybe minor performance hurt
             # is worthwhile to the correctness.
             insert_loc = len(algos.unique(self.sp_values[:fill_loc]))
-            uniques = np.insert(uniques, insert_loc, self.fill_value)
+            fill_value = _unbox_fill_value(uniques.dtype, self.fill_value)
+            uniques = np.insert(uniques, insert_loc, fill_value)
         return type(self)._from_sequence(uniques, dtype=self.dtype)
 
     def _values_for_factorize(self):
@@ -1159,7 +1164,8 @@ class SparseArray(OpsMixin, PandasObject, ExtensionArray):
                 # [Any]]], Sequence[Sequence[_SupportsArray[dtype[Any]]]],
                 # Sequence[Sequence[Sequence[_SupportsArray[dtype[Any]]]]], Sequence
                 # [Sequence[Sequence[Sequence[_SupportsArray[dtype[Any]]]]]]]"
-                keys = np.insert(keys, 0, self.fill_value)  # type: ignore[arg-type]
+                fill_value = _unbox_fill_value(self.sp_values.dtype, self.fill_value)
+                keys = np.insert(keys, 0, fill_value)  # type: ignore[arg-type]
                 counts = np.insert(counts, 0, fcounts)
 
         if not isinstance(keys, ABCIndex):
