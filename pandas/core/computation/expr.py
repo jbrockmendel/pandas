@@ -581,9 +581,18 @@ class BaseExprVisitor(ast.NodeVisitor):
 
         value = self.visit(node.value)
         slobj = self.visit(node.slice)
-        result = pd_eval(
-            slobj, local_dict=self.env, engine=self.engine, parser=self.parser
-        )
+        if isinstance(slobj, slice):
+            # visit_Slice returns a bare slice; re-parsing it would stringify it into
+            # a slice(...) call, which is not a supported function (GH#49905)
+            result = slobj
+        elif is_term(slobj):
+            # already resolved; re-parsing pushes it back through numexpr
+            result = slobj.value
+        else:
+            # an Op still needs the engine, which aligns Series operands
+            result = pd_eval(
+                slobj, local_dict=self.env, engine=self.engine, parser=self.parser
+            )
         try:
             # a Term instance
             v = value.value[result]
@@ -600,13 +609,13 @@ class BaseExprVisitor(ast.NodeVisitor):
         """df.index[slice(4,6)]"""
         lower = node.lower
         if lower is not None:
-            lower = self.visit(lower).value
+            lower = self.visit(lower)(self.env)
         upper = node.upper
         if upper is not None:
-            upper = self.visit(upper).value
+            upper = self.visit(upper)(self.env)
         step = node.step
         if step is not None:
-            step = self.visit(step).value
+            step = self.visit(step)(self.env)
 
         return slice(lower, upper, step)
 
