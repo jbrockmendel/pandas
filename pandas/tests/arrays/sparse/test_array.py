@@ -590,6 +590,25 @@ def test_map_missing():
     tm.assert_sp_array_equal(result, expected)
 
 
+def test_map_list_valued_mapper():
+    # GH#68586 the fill-value collision check must not take the truth of a
+    #  mapper result that is not a scalar
+    arr = SparseArray(np.array([1, 2, 0, 0]), fill_value=0)
+
+    result = arr.map({0: 9, 1: [1, 2], 2: 5})
+    assert list(result) == [[1, 2], 5, 9, 9]
+
+
+def test_map_object_subtype_with_na():
+    # GH#68586 the fill-value collision check took the truth of an object
+    #  comparison, which a stored pd.NA makes ambiguous
+    values = np.array([1, pd.NA, 2], dtype=object)
+    arr = SparseArray(values, fill_value=0)
+
+    result = arr.map(lambda x: x)
+    tm.assert_numpy_array_equal(result.to_dense(), values)
+
+
 @pytest.mark.parametrize("fill_value", [np.nan, 1])
 def test_dropna(fill_value):
     # GH-28287
@@ -707,3 +726,14 @@ def test_array_interface(arr_data, arr):
     result_nocopy1 = np.array(arr2, copy=False)
     result_nocopy2 = np.array(arr2, copy=False)
     assert np.may_share_memory(result_nocopy1, result_nocopy2)
+
+
+def test_value_counts_object_subtype_with_na():
+    # GH#68586 the fill_value mask took the truth of an object comparison, which
+    #  pd.NA makes ambiguous
+    values = np.array([1, pd.NA, 0, 1], dtype=object)
+    arr = SparseArray(values, fill_value=0)
+
+    result = arr.value_counts(dropna=False)
+    expected = pd.Series([1, 2, 1], index=pd.Index([0, 1, pd.NA], dtype=object))
+    tm.assert_series_equal(result, expected)
