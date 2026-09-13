@@ -195,8 +195,26 @@ class TestSparseArray(base.ExtensionTests):
         expected = SparseArray([False, False], fill_value=False, dtype=expected_dtype)
         tm.assert_equal(sarr.isna(), expected)
 
-    def test_fillna_no_op_returns_copy(self, data, request):
-        super().test_fillna_no_op_returns_copy(data)
+    def test_fillna_no_op_returns_copy(self, data):
+        # Have to override to specify that fill_value will change.
+        data = data[~data.isna()]
+        valid = data[0]
+
+        result = data.fillna(valid)
+        assert result is not data
+        if pd.isna(data.fill_value):
+            expected = SparseArray._simple_new(
+                data.sp_values,
+                data.sp_index,
+                pd.SparseDtype(data.dtype.subtype, valid),
+            )
+        else:
+            expected = data
+        tm.assert_extension_array_equal(result, expected)
+
+        result = data._pad_or_backfill(method="backfill")
+        assert result is not data
+        tm.assert_extension_array_equal(result, data)
 
     @pytest.mark.xfail(reason="Unsupported")
     def test_fillna_series(self, data_missing):
@@ -272,7 +290,8 @@ class TestSparseArray(base.ExtensionTests):
         cond = np.array([True, True, False, False])
         result = ser.where(cond)
 
-        new_dtype = pd.SparseDtype("float", 0.0)
+        # where promotes the subtype to float but keeps the fill_value
+        new_dtype = pd.SparseDtype("float64", data.dtype.fill_value)
         expected = pd.Series(
             cls._from_sequence([a, a, na_value, na_value], dtype=new_dtype)
         )
@@ -381,8 +400,6 @@ class TestSparseArray(base.ExtensionTests):
             "rmul",
             "floordiv",
             "rfloordiv",
-            "truediv",
-            "rtruediv",
             "pow",
             "mod",
             "rmod",

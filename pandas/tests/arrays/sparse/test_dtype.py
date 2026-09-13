@@ -100,6 +100,25 @@ def test_nans_not_equal():
     assert b != a
 
 
+@pytest.mark.parametrize(
+    "subtype, fill_value",
+    [
+        ("float64", 0.0),
+        ("float64", 1.5),
+        ("M8[ns]", np.datetime64("2020-01-01", "ns")),
+        ("m8[s]", np.timedelta64(1, "s")),
+    ],
+)
+def test_na_fill_value_not_equal_to_non_na(subtype, fill_value):
+    # GH#68567 the NA branch compared fill values by type, so the subtype's own
+    #  NA fill value matched every fill value of that type
+    a = pd.SparseDtype(subtype)
+    b = pd.SparseDtype(subtype, fill_value)
+    assert a._is_na_fill_value and not b._is_na_fill_value
+    assert a != b
+    assert b != a
+
+
 tups = [
     (pd.SparseDtype("float64"), pd.SparseDtype("float32")),
     (pd.SparseDtype("float64"), pd.SparseDtype("float64", 0)),

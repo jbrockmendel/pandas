@@ -1846,7 +1846,9 @@ class SparseDtype(ExtensionDtype):
                 # comparing fill values across subtypes cannot change the result
                 # and can warn, e.g. numpy deprecates timedelta64 == int
                 return False
-            if self._is_na_fill_value or other._is_na_fill_value:
+            self_na = self._is_na_fill_value
+            other_na = other._is_na_fill_value
+            if self_na and other_na:
                 # this case is complicated by two things:
                 # SparseDtype(float, float(nan)) == SparseDtype(float, np.nan)
                 # SparseDtype(float, np.nan)     != SparseDtype(float, pd.NaT)
@@ -1855,6 +1857,10 @@ class SparseDtype(ExtensionDtype):
                 fill_value = isinstance(
                     self.fill_value, type(other.fill_value)
                 ) or isinstance(other.fill_value, type(self.fill_value))
+            elif self_na or other_na:
+                # GH#68567 the type check above would match an NA fill value
+                #  against any non-NA fill value of the same type
+                fill_value = False
             else:
                 with warnings.catch_warnings():
                     # Ignore spurious numpy warning
