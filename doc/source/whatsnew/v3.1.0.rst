@@ -1140,6 +1140,7 @@ Reshaping
 
 Sparse
 ^^^^^^
+- Bug in :attr:`DataFrame.sparse.density` emitting ``RuntimeWarning`` for a :class:`DataFrame` with no columns (:issue:`68564`)
 - Bug in :attr:`Series.sparse.density`, :attr:`DataFrame.sparse.density`, and :attr:`SparseArray.density` raising ``ZeroDivisionError`` on empty data instead of returning ``nan`` (:issue:`68468`)
 - Bug in :class:`SparseArray` with a datetime64 or timedelta64 subtype where a ``pd.NaT`` ``fill_value`` raised ``TypeError`` from :meth:`SparseArray.to_dense`, :meth:`SparseArray.unique`, :meth:`SparseArray.astype`, :meth:`SparseArray.take`, and arithmetic and comparison operations, and made ``np.asarray`` on a timedelta64 subtype return ``object`` dtype; all of these behaved correctly for an equivalent ``np.datetime64("NaT")`` fill value (:issue:`68449`)
 - Bug in :class:`SparseDtype` where two equal instances with an NA ``fill_value`` could hash differently, so a datetime64 or timedelta64 :class:`SparseDtype` could not be used as a dict key and identical sparse columns were counted separately by :meth:`Series.value_counts` on :attr:`DataFrame.dtypes` (:issue:`68449`)
