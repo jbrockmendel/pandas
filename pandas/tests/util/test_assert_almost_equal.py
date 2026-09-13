@@ -217,8 +217,27 @@ def test_assert_almost_equal_large_mixed_integer_float_rtol():
 )
 def test_assert_almost_equal_large_mixed_integer_float_equal(left, right):
     # GH#66699 magnitudes above 2**53 bypass the array_equivalent fast path, so
-    #  the equal case has to survive the elementwise comparison too.
+    #  the equal case has to be settled at full integer precision instead.
     _assert_almost_equal_both(left, right, check_dtype=False, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(
+    "left,right",
+    [
+        (
+            np.array([2**63 - 1], dtype="int64"),
+            np.array([float(2**63)], dtype="float64"),
+        ),
+        (
+            np.array([2**64 - 1], dtype="uint64"),
+            np.array([float(2**64)], dtype="float64"),
+        ),
+    ],
+)
+def test_assert_almost_equal_mixed_integer_float_out_of_range(left, right):
+    # GH#68568 the float rounds past the end of the integer dtype, so it has no
+    #  exact integer cast and the one-integer difference must still be reported
+    _assert_not_almost_equal_both(left, right, check_dtype=False, rtol=0, atol=0)
 
 
 def test_assert_almost_equal_large_mixed_integer_float_message():
@@ -235,8 +254,7 @@ def test_assert_almost_equal_large_mixed_integer_float_message():
 
 
 def test_assert_almost_equal_2d_large_mixed_integer_float():
-    # GH#68366 the GH#66699 magnitude guard sends exactly-equal large integers
-    #  through the element loop, which must honour check_dtype like the 1-D case
+    # GH#68366 check_dtype=False must hold in 2-D as well as 1-D
     big = np.array([[2**60, 1], [2, 3]], dtype="int64")
 
     _assert_almost_equal_both(
