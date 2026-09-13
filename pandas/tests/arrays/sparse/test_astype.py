@@ -247,7 +247,7 @@ class TestAstype:
         tm.assert_sp_array_equal(result, expected)
 
     def test_astype_uint64_dense_exact(self):
-        # GH#68506 densifying for astype must not promote on type(fill_value):
+        # GH#68573 densifying for astype must not promote on type(fill_value):
         #  np.result_type(uint64, int) is float64, which rounds above 2**53
         values = np.array([1, 0, 2**63 + 12345], dtype="uint64")
         arr = SparseArray(values, fill_value=0)
@@ -262,7 +262,7 @@ class TestAstype:
     def test_astype_dense_boxed_datetimelike_fill_value(
         self, unit_dtype, fill_type, target
     ):
-        # GH#68506 a boxed Timestamp/Timedelta fill_value made the densified
+        # GH#68573 a boxed Timestamp/Timedelta fill_value made the densified
         #  values object dtype, so the cast saw the stored values as raw integers
         values = np.array([10**9, 2 * 10**9]).astype(unit_dtype)
         arr = SparseArray(values, fill_value=fill_type(values[0]))
