@@ -710,7 +710,7 @@ def test_array_interface(arr_data, arr):
 
 
 def test_shift_bool_subtype():
-    # GH#68506 np.result_type promoted the NA fill to float64, which the array's
+    # GH#68580 np.result_type promoted the NA fill to float64, which the array's
     #  own False fill_value is not valid for
     arr = SparseArray(np.array([True, False]))
     result = arr.shift(1)
@@ -724,7 +724,7 @@ def test_shift_bool_subtype():
 
 
 def test_shift_fill_value_promotion():
-    # GH#68506 np.result_type is not value-aware, so an int64 subtype both cast a
+    # GH#68580 np.result_type is not value-aware, so an int64 subtype both cast a
     #  bool fill to 1 and widened for a float fill it could hold exactly
     arr = SparseArray(np.array([1, 2, 3]))
 
@@ -739,7 +739,7 @@ def test_shift_fill_value_promotion():
 @pytest.mark.parametrize("kind", ["M8", "m8"])
 @pytest.mark.parametrize("unit", ["s", "ms", "us", "ns"])
 def test_shift_datetimelike_subtype(kind, unit):
-    # GH#68506 np.result_type cannot promote a datetimelike dtype against the
+    # GH#68580 np.result_type cannot promote a datetimelike dtype against the
     #  NA fill value at all, so this raised
     dtype = f"{kind}[{unit}]"
     values = np.array([1, 2, 3], dtype="i8").astype(dtype)
