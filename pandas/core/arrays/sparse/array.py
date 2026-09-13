@@ -683,6 +683,12 @@ class SparseArray(OpsMixin, PandasObject, ExtensionArray):
             )
 
         fill_value = self.fill_value
+        if self.sp_values.dtype.kind in "mM" and isinstance(
+            fill_value, (Timestamp, Timedelta)
+        ):
+            # np.result_type gives object for a boxed scalar and np.full truncates
+            #  it to microseconds; see _promote_for_fill for why object is left alone
+            fill_value = fill_value.asm8
 
         if dtype is None:
             # Can NumPy represent this type?
