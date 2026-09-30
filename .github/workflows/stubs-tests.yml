@@ -7,6 +7,9 @@ on:
   # after the nightly wheel upload in wheels.yml (3:27 UTC) has finished
   - cron: "17 5 * * *"
   workflow_dispatch:
+  # DEMO ONLY (GH-54095 review): run on push to demo branches of the fork
+  push:
+    branches: ["stubs-demo-*"]
 
 defaults:
   run:
@@ -17,7 +20,7 @@ permissions: {}
 jobs:
   stubs_tests:
     name: pandas-stubs tests against pandas nightly
-    if: github.repository == 'pandas-dev/pandas'
+    if: github.repository == 'jbrockmendel/pandas'  # DEMO ONLY
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
