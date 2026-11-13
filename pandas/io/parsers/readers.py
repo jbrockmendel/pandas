@@ -73,6 +73,7 @@ from pandas.core.arrays import (
     DatetimeArray,
     TimedeltaArray,
 )
+from pandas.core.column_selection import ColumnsResolver
 from pandas.core.frame import DataFrame
 from pandas.core.indexes.api import (
     Index,
@@ -121,6 +122,7 @@ if TYPE_CHECKING:
 
     from pandas._typing import (
         ArrayLike,
+        ColumnsArgType,
         CompressionOptions,
         CSVEngine,
         DtypeArg,
@@ -143,6 +145,7 @@ if TYPE_CHECKING:
         names: Sequence[Hashable] | lib.NoDefault | None
         index_col: IndexLabel | Literal[False] | None
         usecols: UsecolsArgType[HashableT2]
+        columns: ColumnsArgType | None
         dtype: DtypeArg | None
         engine: CSVEngine | None
         converters: Mapping[HashableT, Callable[..., Any]] | None
@@ -428,11 +431,14 @@ def _read(
     # in parallel.
     if not iterator and chunksize is None and nrows is None:
         _n_workers = _default_n_workers()
-        if _n_workers > 1 and _can_parallelize_csv(filepath_or_buffer, kwds):
+        # a copy, so a fallback to the serial read below still sees 'columns'
+        parallel_kwds = dict(kwds)
+        resolver = _make_columns_resolver(parallel_kwds, "c")
+        if _n_workers > 1 and _can_parallelize_csv(filepath_or_buffer, parallel_kwds):
             _filepath = stringify_path(filepath_or_buffer)
             assert isinstance(_filepath, str)  # guaranteed by _can_parallelize_csv
             try:
-                result = _read_csv_parallel(_filepath, kwds, _n_workers)
+                result = _read_csv_parallel(_filepath, parallel_kwds, _n_workers)
             except (ParserError, UnicodeDecodeError, OverflowError):
                 # e.g. the one-line sample that infers the column names ends
                 # inside a quoted field (GH#66259).  The serial path below
@@ -442,7 +448,7 @@ def _read(
                 # signal a parallel-path bug, not ineligible input.
                 result = None
             if result is not None:
-                return result
+                return result if resolver is None else resolver.finalize(result)
 
     # Create the parser.
     parser = TextFileReader(filepath_or_buffer, **kwds)
@@ -943,6 +949,11 @@ def _read_csv_chunks(
         return None
     assert name_reader._engine.orig_names is not None
     col_names: list[Hashable] = list(name_reader._engine.orig_names)
+    usecols = base_kwds.get("usecols")
+    if isinstance(usecols, ColumnsResolver):
+        # Resolve against the full header once, so every worker gets the same
+        # positional usecols; the caller reorders and sets the index.
+        base_kwds["usecols"] = usecols.resolve(col_names)
     # name_buf holds the preamble plus exactly one data line.  Parsing it must
     # yield exactly one row; anything else means the preamble's physical line
     # count disagrees with its logical row count (e.g. a quoted embedded
@@ -1407,6 +1418,7 @@ def read_csv(
     names: Sequence[Hashable] | lib.NoDefault | None = lib.no_default,
     index_col: IndexLabel | Literal[False] | None = None,
     usecols: UsecolsArgType[HashableT2] = None,
+    columns: ColumnsArgType | None = None,
     # General Parsing Configuration
     dtype: DtypeArg | None = None,
     engine: CSVEngine | None = None,
@@ -1554,6 +1566,20 @@ def read_csv(
         example of a valid callable argument would be ``lambda x: x.upper() in
         ['AAA', 'BBB', 'DDD']``. Using this parameter results in much faster
         parsing time and lower memory usage.
+    columns : list of Hashable, pd.columns selection, or callable, optional
+        Columns to read, in the order given. Positions refer to the header the
+        file (or ``names``) provides.
+
+        * A list selects by label, e.g. ``['c', 'a']``.
+        * Indexing :data:`pandas.columns` selects by position, as indexing
+          ``df.columns`` would: ``pd.columns[[2, 0]]``, ``pd.columns[1:]``.
+        * A callable receives the header as an :class:`Index` and returns labels
+          or a boolean mask, e.g. ``lambda cols: cols.drop('id')``.
+
+        ``index_col`` then refers to the selected columns. Cannot be combined with
+        ``usecols``. When given, ``names`` must name every column in the file.
+
+        .. versionadded:: 3.2.0
     dtype : dtype or dict of {Hashable : dtype}, optional
         Data type(s) to apply to either the whole dataset or individual columns.
         E.g., ``{'a': np.float64, 'b': np.int32, 'c': 'Int64'}``
@@ -2022,6 +2048,7 @@ def read_table(
     names: Sequence[Hashable] | lib.NoDefault | None = lib.no_default,
     index_col: IndexLabel | Literal[False] | None = None,
     usecols: UsecolsArgType[HashableT2] = None,
+    columns: ColumnsArgType | None = None,
     # General Parsing Configuration
     dtype: DtypeArg | None = None,
     engine: CSVEngine | None = None,
@@ -2167,6 +2194,20 @@ def read_table(
         example of a valid callable argument would be ``lambda x: x.upper() in
         ['AAA', 'BBB', 'DDD']``. Using this parameter results in much faster
         parsing time and lower memory usage.
+    columns : list of Hashable, pd.columns selection, or callable, optional
+        Columns to read, in the order given. Positions refer to the header the
+        file (or ``names``) provides.
+
+        * A list selects by label, e.g. ``['c', 'a']``.
+        * Indexing :data:`pandas.columns` selects by position, as indexing
+          ``df.columns`` would: ``pd.columns[[2, 0]]``, ``pd.columns[1:]``.
+        * A callable receives the header as an :class:`Index` and returns labels
+          or a boolean mask, e.g. ``lambda cols: cols.drop('id')``.
+
+        ``index_col`` then refers to the selected columns. Cannot be combined with
+        ``usecols``. When given, ``names`` must name every column in the file.
+
+        .. versionadded:: 3.2.0
     dtype : dtype or dict of {Hashable : dtype}, optional
         Data type(s) to apply to either the whole dataset or individual columns.
         E.g., ``{'a': np.float64, 'b': np.int32, 'c': 'Int64'}``
@@ -2823,6 +2864,8 @@ class TextFileReader(abc.Iterator[DataFrame]):
         if kwds.get("header", "infer") == "infer":
             kwds["header"] = 0 if kwds.get("names") is None else None
 
+        self._columns_resolver = _make_columns_resolver(kwds, engine)
+
         self.orig_options = kwds
 
         # miscellanea
@@ -3243,6 +3286,8 @@ class TextFileReader(abc.Iterator[DataFrame]):
             self.close()
             raise
         self._currow += len(df)
+        if self._columns_resolver is not None:
+            df = self._columns_resolver.finalize(df)
         return df
 
     def get_chunk(self, size: int | None = None) -> DataFrame:
@@ -3301,6 +3346,41 @@ class TextFileReader(abc.Iterator[DataFrame]):
         traceback: TracebackType | None,
     ) -> None:
         self.close()
+
+
+def _make_columns_resolver(
+    kwds: dict[str, Any], engine: CSVEngine
+) -> ColumnsResolver | None:
+    """
+    Replace a ``columns`` selection in ``kwds`` by what the engines understand.
+
+    The engine reads without an index; the returned resolver puts the columns
+    in the requested order and sets the index afterwards.
+    """
+    columns = kwds.pop("columns", None)
+    if columns is None:
+        return None
+    if kwds.get("usecols") is not None:
+        raise ValueError("Specify only one of 'columns' and 'usecols'.")
+    header = kwds.get("header")
+    if isinstance(header, (list, tuple)) and len(header) > 1:
+        raise ValueError(
+            "'columns' is not supported together with a multi-row 'header'."
+        )
+    names = kwds.get("names")
+    resolver = ColumnsResolver(
+        columns,
+        index_col=kwds.get("index_col"),
+        unnamed_header=header is None and names in (None, lib.no_default),
+    )
+    if engine == "pyarrow":
+        # pyarrow rejects index_col=False; it reads every column and the
+        # resolver selects afterwards
+        kwds["index_col"] = None
+    else:
+        kwds["index_col"] = False
+        kwds["usecols"] = resolver
+    return resolver
 
 
 def TextParser(*args, **kwds) -> TextFileReader:

@@ -832,6 +832,31 @@ def test_read_csv_parallel_vs_serial_large_file(tmp_path, monkeypatch):
     assert outcomes == ["used"]
 
 
+@pytest.mark.skipif(WASM, reason="WASM stays serial, so the spy sees no call")
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"columns": pd.columns[[2, 0]]},
+        {"columns": ["float_col", "str_col"]},
+        {"columns": lambda cols: cols.drop("float_col")},
+        {"columns": pd.columns[::-1], "index_col": "str_col"},
+        {"columns": pd.columns[[1, 0]], "index_col": 1},
+    ],
+)
+def test_read_csv_parallel_columns(tmp_path, monkeypatch, kwargs):
+    # the selection is resolved once against the header; workers get positions
+    path = tmp_path / "big.csv"
+    _make_large_csv(path)
+    monkeypatch.setattr(_readers, "_PARALLEL_READ_MIN_BYTES", 1)
+
+    serial = pd.read_csv(path, engine="python", **kwargs)
+    outcomes = _track_parallel(monkeypatch)
+    with pd.option_context("mode.max_threads", 4):
+        parallel = pd.read_csv(path, engine="c", **kwargs)
+    tm.assert_frame_equal(parallel, serial)
+    assert outcomes == ["used"]
+
+
 @pytest.mark.parametrize("platform_name", ["linux", "darwin", "win32"])
 def test_parallel_on_by_default(tmp_path, monkeypatch, platform_name):
     """The parallel path is on by default on every threaded platform."""

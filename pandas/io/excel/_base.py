@@ -70,6 +70,7 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from pandas._typing import (
+        ColumnsArgType,
         DtypeArg,
         DtypeBackend,
         ExcelWriterIfSheetExists,
@@ -100,6 +101,7 @@ def read_excel(
     | Sequence[str]
     | Callable[[HashableT], bool]
     | None = ...,
+    columns: ColumnsArgType | None = ...,
     dtype: DtypeArg | None = ...,
     engine: Literal["xlrd", "openpyxl", "odf", "pyxlsb", "calamine"] | None = ...,
     converters: dict[str, Callable[..., Any]]
@@ -139,6 +141,7 @@ def read_excel(
     | Sequence[str]
     | Callable[[HashableT], bool]
     | None = ...,
+    columns: ColumnsArgType | None = ...,
     dtype: DtypeArg | None = ...,
     engine: Literal["xlrd", "openpyxl", "odf", "pyxlsb", "calamine"] | None = ...,
     converters: dict[str, Callable[..., Any]]
@@ -177,6 +180,7 @@ def read_excel(
     | Sequence[str]
     | Callable[[HashableT], bool]
     | None = None,
+    columns: ColumnsArgType | None = None,
     dtype: DtypeArg | None = None,
     engine: Literal["xlrd", "openpyxl", "odf", "pyxlsb", "calamine"] | None = None,
     converters: dict[str, Callable[..., Any]]
@@ -291,6 +295,20 @@ def read_excel(
         columns in ``['foo', 'bar']`` order or
         ``pd.read_excel(path, usecols=['foo', 'bar'])[['bar', 'foo']]`` for
         ``['bar', 'foo']`` order.
+    columns : list of Hashable, pd.columns selection, or callable, optional
+        Columns to read, in the order given. Positions refer to the header the
+        file (or ``names``) provides.
+
+        * A list selects by label, e.g. ``['c', 'a']``.
+        * Indexing :data:`pandas.columns` selects by position, as indexing
+          ``df.columns`` would: ``pd.columns[[2, 0]]``, ``pd.columns[1:]``.
+        * A callable receives the header as an :class:`Index` and returns labels
+          or a boolean mask, e.g. ``lambda cols: cols.drop('id')``.
+
+        ``index_col`` then refers to the selected columns. Cannot be combined with
+        ``usecols``. When given, ``names`` must name every column in the file.
+
+        .. versionadded:: 3.2.0
     dtype : Type name or dict of column -> type, default None
         Data type for data or columns. E.g. {'a': np.float64, 'b': np.int32}
         Use ``object`` to preserve data as stored in Excel and not interpret dtype,
@@ -538,6 +556,7 @@ def read_excel(
             names=names,
             index_col=index_col,
             usecols=usecols,
+            columns=columns,
             dtype=dtype,
             converters=converters,
             true_values=true_values,
@@ -747,6 +766,7 @@ class BaseExcelReader(Generic[_WorkbookT]):
         names: SequenceNotStr[Hashable] | range | None = None,
         index_col: int | Sequence[int] | None = None,
         usecols=None,
+        columns=None,
         dtype: DtypeArg | None = None,
         true_values: Iterable[Hashable] | None = None,
         false_values: Iterable[Hashable] | None = None,
@@ -816,6 +836,7 @@ class BaseExcelReader(Generic[_WorkbookT]):
                 names=names,
                 index_col=index_col,
                 usecols=usecols,
+                columns=columns,
                 dtype=dtype,
                 skiprows=skiprows,
                 nrows=nrows,
@@ -849,6 +870,7 @@ class BaseExcelReader(Generic[_WorkbookT]):
         names: SequenceNotStr[Hashable] | range | None = None,
         index_col: int | Sequence[int] | None = None,
         usecols=None,
+        columns=None,
         dtype: DtypeArg | None = None,
         skiprows: Sequence[int] | int | Callable[[int], object] | None = None,
         nrows: int | None = None,
@@ -977,6 +999,7 @@ class BaseExcelReader(Generic[_WorkbookT]):
                 comment=comment,
                 skipfooter=skipfooter,
                 usecols=usecols,
+                columns=columns,
                 dtype_backend=dtype_backend,
                 **kwds,
             )
@@ -1742,6 +1765,7 @@ class ExcelFile:
         names: SequenceNotStr[Hashable] | range | None = None,
         index_col: int | Sequence[int] | None = None,
         usecols=None,
+        columns=None,
         converters=None,
         true_values: Iterable[Hashable] | None = None,
         false_values: Iterable[Hashable] | None = None,
@@ -1917,6 +1941,7 @@ class ExcelFile:
             names=names,
             index_col=index_col,
             usecols=usecols,
+            columns=columns,
             converters=converters,
             true_values=true_values,
             false_values=false_values,

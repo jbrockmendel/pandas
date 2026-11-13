@@ -60,7 +60,7 @@ class TestPDApi(Base):
     private_lib = ["compat", "core", "util"]
 
     # misc
-    misc = ["IndexSlice", "NaT", "NA"]
+    misc = ["IndexSlice", "NaT", "NA", "columns"]
 
     # top-level classes
     classes = [
@@ -266,6 +266,7 @@ class TestApi(Base):
         "internals",
     ]
     allowed_typing = [
+        "ColumnSelection",
         "DataFrameGroupBy",
         "DatetimeIndexResamplerGroupBy",
         "Expanding",

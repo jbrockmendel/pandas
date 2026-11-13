@@ -46,6 +46,10 @@ from pandas.core.arrays import (
     ExtensionArray,
 )
 from pandas.core.arrays.boolean import BooleanDtype
+from pandas.core.column_selection import (
+    SHORT_NAMES_MSG,
+    ColumnsResolver,
+)
 from pandas.core.indexes.api import Index
 
 from pandas.io.common import (
@@ -804,7 +808,13 @@ class PythonParser(ParserBase):
         """
         col_indices: set[int] | list[int]
         if self.usecols is not None:
-            if callable(self.usecols):
+            if isinstance(self.usecols, ColumnsResolver):
+                if len(usecols_key) < max(num_original_columns, len(columns[0])):
+                    raise ValueError(SHORT_NAMES_MSG)
+                col_indices = self.usecols.resolve(usecols_key)
+                # From here on, plain positional usecols.
+                self.usecols, self.usecols_dtype = col_indices, "integer"
+            elif callable(self.usecols):
                 col_indices = evaluate_callable_usecols(self.usecols, usecols_key)
             elif any(isinstance(u, str) for u in self.usecols):
                 if len(columns) > 1:

@@ -40,6 +40,7 @@ class TextReader:
     table_width: int  # int64_t
     leading_cols: int  # int64_t
     header: list[list[int]]  # non-negative integers
+    usecols: set[int] | Callable[[Hashable], bool] | None
     defer_pa_wrap: bool
     block_workers: int
     trim_after_read: bool

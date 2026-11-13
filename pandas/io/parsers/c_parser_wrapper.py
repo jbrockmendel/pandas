@@ -27,6 +27,10 @@ from pandas.core.dtypes.dtypes import CategoricalDtype
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 from pandas.core.arrays.string_ import StringDtype
 from pandas.core.arrays.string_arrow import ArrowStringArray
+from pandas.core.column_selection import (
+    SHORT_NAMES_MSG,
+    ColumnsResolver,
+)
 from pandas.core.indexes.api import ensure_index_from_sequences
 
 from pandas.io.common import (
@@ -140,7 +144,15 @@ class CParserWrapper(ParserBase):
         # then set orig_names again to names
         self.orig_names = self.names[:]
 
-        if self.usecols:
+        if isinstance(self.usecols, ColumnsResolver):
+            if len(self.orig_names) < self._reader.table_width:
+                raise ValueError(SHORT_NAMES_MSG)
+            # From here on the reader sees plain positional usecols.
+            positions = self.usecols.resolve(self.orig_names)
+            self.usecols, self.usecols_dtype = positions, "integer"
+            self._reader.usecols = positions
+            self.names = [n for i, n in enumerate(self.names) if i in positions]
+        elif self.usecols:
             usecols = evaluate_callable_usecols(self.usecols, self.orig_names)
 
             # GH 14671

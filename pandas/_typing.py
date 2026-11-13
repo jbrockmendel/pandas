@@ -61,6 +61,7 @@ if TYPE_CHECKING:
         TimedeltaArray,
     )
     from pandas.core.arrays.base import ExtensionArray
+    from pandas.core.column_selection import ColumnSelection
     from pandas.core.frame import DataFrame
     from pandas.core.generic import NDFrame
     from pandas.core.groupby.generic import (
@@ -535,6 +536,11 @@ OffsetCalendar: TypeAlias = Union[np.busdaycalendar, "AbstractHolidayCalendar"]
 UsecolsArgType: TypeAlias = (
     SequenceNotStr[Hashable] | range | AnyArrayLike | Callable[[HashableT], bool] | None
 )
+
+# read_csv/read_excel: columns
+ColumnsArgType: TypeAlias = Union[
+    SequenceNotStr[Hashable], "ColumnSelection", Callable[["Index"], Any]
+]
 
 # maintain the sub-type of any hashable sequence
 SequenceT = TypeVar("SequenceT", bound=Sequence[Hashable])

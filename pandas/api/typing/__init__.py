@@ -15,6 +15,7 @@ from pandas._libs.lib import NoDefault
 from pandas._libs.missing import NAType
 
 from pandas.core.col import Expression
+from pandas.core.column_selection import ColumnSelection
 from pandas.core.groupby import (
     DataFrameGroupBy,
     SeriesGroupBy,
@@ -44,6 +45,7 @@ from pandas.io.sas.sasreader import SASReader
 from pandas.io.stata import StataReader
 
 __all__ = [
+    "ColumnSelection",
     "DataFrameGroupBy",
     "DatetimeIndexResamplerGroupBy",
     "Expanding",

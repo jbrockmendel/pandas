@@ -57,6 +57,7 @@ from pandas.core.arrays import (
     FloatingArray,
     IntegerArray,
 )
+from pandas.core.column_selection import ColumnsResolver
 from pandas.core.indexes.api import (
     Index,
     MultiIndex,
@@ -1109,6 +1110,8 @@ def evaluate_callable_usecols(
     each entry in 'names' that evaluates to True.
     If not a callable, returns 'usecols'.
     """
+    if isinstance(usecols, ColumnsResolver):
+        return usecols.resolve(list(names))
     if callable(usecols):
         return {i for i, name in enumerate(names) if usecols(name)}
     return usecols
